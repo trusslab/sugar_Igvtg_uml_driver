@@ -41,6 +41,7 @@
 
 #include <linux/vgaarb.h>
 #include <linux/export.h>
+#include <linux/prints.h>
 
 #ifdef CONFIG_I915_VGT
 bool (*tmp_vgt_can_process_timer)(void *timer) = NULL;
@@ -1218,11 +1219,8 @@ void drm_wait_one_vblank(struct drm_device *dev, unsigned int pipe)
 
 	last = drm_vblank_count(dev, pipe);
 
-	ret = wait_event_timeout(vblank->queue,
-				 last != drm_vblank_count(dev, pipe),
-				 msecs_to_jiffies(100));
 
-	WARN(ret == 0, "vblank wait timed out on crtc %i\n", pipe);
+
 
 	drm_vblank_put(dev, pipe);
 }
@@ -1789,7 +1787,6 @@ bool drm_handle_vblank(struct drm_device *dev, unsigned int pipe)
 
 	spin_unlock(&dev->vblank_time_lock);
 
-	wake_up(&vblank->queue);
 	drm_handle_vblank_events(dev, pipe);
 
 	spin_unlock_irqrestore(&dev->event_lock, irqflags);

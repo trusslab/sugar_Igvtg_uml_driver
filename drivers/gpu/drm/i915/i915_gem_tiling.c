@@ -30,6 +30,7 @@
 #include <drm/drmP.h>
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
+#include <linux/prints.h>
 
 /**
  * DOC: buffer object tiling

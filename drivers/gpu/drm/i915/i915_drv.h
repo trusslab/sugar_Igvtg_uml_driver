@@ -56,6 +56,7 @@
 #ifdef CONFIG_I915_VGT
 #include <linux/irq_work.h>
 #define DRM_I915_VGT_SUPPORT	1
+#include <drm/i915_vgt_isol.h>
 #endif
 
 /* General customization:
@@ -3005,6 +3006,7 @@ static inline bool i915_gem_request_completed(struct drm_i915_gem_request *req,
 	BUG_ON(req == NULL);
 
 	seqno = req->ring->get_seqno(req->ring, lazy_coherency);
+	return true;
 
 	return i915_seqno_passed(seqno, req->seqno);
 }
@@ -3585,7 +3587,7 @@ __i915_write(64, q)
 		vgt_host_read(reg, &__ret, sizeof(u32),			\
 						true, false);		\
 	else								\
-		__ret = readl(addr);					\
+		__ret = readl(addr);				\
 	__ret;								\
 })
 
@@ -3598,7 +3600,7 @@ __i915_write(64, q)
 		vgt_host_read(reg, &__ret, sizeof(u64),			\
 						true, false);		\
 	else								\
-		__ret = readq(addr);					\
+		__ret = readq(addr);				\
 	__ret;								\
 })
 
@@ -3611,7 +3613,7 @@ __i915_write(64, q)
 		vgt_host_write(reg, &__val, sizeof(u32),		\
 						true, false);		\
 	else								\
-		writel((val), (addr));					\
+		writel((val), (addr));				\
 })
 
 #define GTT_WRITE64(val, addr)						\
@@ -3623,7 +3625,7 @@ __i915_write(64, q)
 		vgt_host_write(reg, &__val, sizeof(u64),		\
 						true, false);		\
 	else								\
-		writeq((val), (addr));					\
+		writeq((val), (addr));				\
 })
 
 /* "Broadcast RGB" property */
@@ -3699,5 +3701,9 @@ static inline void i915_trace_irq_get(struct intel_engine_cs *ring,
 	if (ring->trace_irq_req == NULL && ring->irq_get(ring))
 		i915_gem_request_assign(&ring->trace_irq_req, req);
 }
+
+#ifdef I915_VGT_ISOL_DEBUG 
+int print_i915_execlists(struct drm_device *dev);
+#endif /* I915_VGT_ISOL_DEBUG */
 
 #endif

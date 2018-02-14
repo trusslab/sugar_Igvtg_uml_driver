@@ -32,6 +32,7 @@
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 #include "intel_drv.h"
+#include <drm/i915_vgt_isol.h>
 
 #define PCI_ASLE		0xe4
 #define PCI_ASLS		0xfc
@@ -289,16 +290,16 @@ static int swsci(struct drm_device *dev, u32 function, u32 parm, u32 *parm_out)
 	swsci->scic = scic;
 
 	/* Ensure SCI event is selected and event trigger is cleared. */
-	pci_read_config_word(dev->pdev, PCI_SWSCI, &pci_swsci);
+	vgt_isol_pci_read_config_word(dev->pdev, PCI_SWSCI, &pci_swsci);
 	if (!(pci_swsci & PCI_SWSCI_SCISEL) || (pci_swsci & PCI_SWSCI_GSSCIE)) {
 		pci_swsci |= PCI_SWSCI_SCISEL;
 		pci_swsci &= ~PCI_SWSCI_GSSCIE;
-		pci_write_config_word(dev->pdev, PCI_SWSCI, pci_swsci);
+		vgt_isol_pci_write_config_word(dev->pdev, PCI_SWSCI, pci_swsci);
 	}
 
 	/* Use event trigger to tell bios to check the mail. */
 	pci_swsci |= PCI_SWSCI_GSSCIE;
-	pci_write_config_word(dev->pdev, PCI_SWSCI, pci_swsci);
+	vgt_isol_pci_write_config_word(dev->pdev, PCI_SWSCI, pci_swsci);
 
 	/* Poll for the result. */
 #define C (((scic = swsci->scic) & SWSCI_SCIC_INDICATOR) == 0)
@@ -908,7 +909,7 @@ int intel_opregion_setup(struct drm_device *dev)
 	BUILD_BUG_ON(sizeof(struct opregion_swsci) != 0x100);
 	BUILD_BUG_ON(sizeof(struct opregion_asle) != 0x100);
 
-	pci_read_config_dword(dev->pdev, PCI_ASLS, &asls);
+	vgt_isol_pci_read_config_dword(dev->pdev, PCI_ASLS, &asls);
 	DRM_DEBUG_DRIVER("graphic opregion physical addr: 0x%x\n", asls);
 	if (asls == 0) {
 		DRM_DEBUG_DRIVER("ACPI OpRegion not supported!\n");

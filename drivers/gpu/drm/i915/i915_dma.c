@@ -50,6 +50,8 @@
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/oom.h>
+#include <drm/i915_vgt_isol.h>
+#include <linux/prints.h>
 
 static async_cookie_t async_fbdev_init_cfg_cookie;
 
@@ -189,10 +191,6 @@ static int i915_get_bridge_dev(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 
 	dev_priv->bridge_dev = pci_get_bus_and_slot(0, PCI_DEVFN(0, 0));
-	if (!dev_priv->bridge_dev) {
-		DRM_ERROR("bridge device not found\n");
-		return -1;
-	}
 	return 0;
 }
 
@@ -214,8 +212,8 @@ intel_alloc_mchbar_resource(struct drm_device *dev)
 	int ret;
 
 	if (INTEL_INFO(dev)->gen >= 4)
-		pci_read_config_dword(dev_priv->bridge_dev, reg + 4, &temp_hi);
-	pci_read_config_dword(dev_priv->bridge_dev, reg, &temp_lo);
+		vgt_isol_pci_read_config_dword(dev_priv->bridge_dev, reg + 4, &temp_hi);
+	vgt_isol_pci_read_config_dword(dev_priv->bridge_dev, reg, &temp_lo);
 	mchbar_addr = ((u64)temp_hi << 32) | temp_lo;
 
 	/* If ACPI doesn't have it, assume we need to allocate it ourselves */
@@ -228,12 +226,7 @@ intel_alloc_mchbar_resource(struct drm_device *dev)
 	/* Get some space for it */
 	dev_priv->mch_res.name = "i915 MCHBAR";
 	dev_priv->mch_res.flags = IORESOURCE_MEM;
-	ret = pci_bus_alloc_resource(dev_priv->bridge_dev->bus,
-				     &dev_priv->mch_res,
-				     MCHBAR_SIZE, MCHBAR_SIZE,
-				     PCIBIOS_MIN_MEM,
-				     0, pcibios_align_resource,
-				     dev_priv->bridge_dev);
+	ret = 0;
 	if (ret) {
 		DRM_DEBUG_DRIVER("failed bus alloc: %d\n", ret);
 		dev_priv->mch_res.start = 0;
@@ -241,10 +234,10 @@ intel_alloc_mchbar_resource(struct drm_device *dev)
 	}
 
 	if (INTEL_INFO(dev)->gen >= 4)
-		pci_write_config_dword(dev_priv->bridge_dev, reg + 4,
+		vgt_isol_pci_write_config_dword(dev_priv->bridge_dev, reg + 4,
 				       upper_32_bits(dev_priv->mch_res.start));
 
-	pci_write_config_dword(dev_priv->bridge_dev, reg,
+	vgt_isol_pci_write_config_dword(dev_priv->bridge_dev, reg,
 			       lower_32_bits(dev_priv->mch_res.start));
 	return 0;
 }
@@ -264,10 +257,10 @@ intel_setup_mchbar(struct drm_device *dev)
 	dev_priv->mchbar_need_disable = false;
 
 	if (IS_I915G(dev) || IS_I915GM(dev)) {
-		pci_read_config_dword(dev_priv->bridge_dev, DEVEN_REG, &temp);
+		vgt_isol_pci_read_config_dword(dev_priv->bridge_dev, DEVEN_REG, &temp);
 		enabled = !!(temp & DEVEN_MCHBAR_EN);
 	} else {
-		pci_read_config_dword(dev_priv->bridge_dev, mchbar_reg, &temp);
+		vgt_isol_pci_read_config_dword(dev_priv->bridge_dev, mchbar_reg, &temp);
 		enabled = temp & 1;
 	}
 
@@ -282,11 +275,11 @@ intel_setup_mchbar(struct drm_device *dev)
 
 	/* Space is allocated or reserved, so enable it. */
 	if (IS_I915G(dev) || IS_I915GM(dev)) {
-		pci_write_config_dword(dev_priv->bridge_dev, DEVEN_REG,
+		vgt_isol_pci_write_config_dword(dev_priv->bridge_dev, DEVEN_REG,
 				       temp | DEVEN_MCHBAR_EN);
 	} else {
-		pci_read_config_dword(dev_priv->bridge_dev, mchbar_reg, &temp);
-		pci_write_config_dword(dev_priv->bridge_dev, mchbar_reg, temp | 1);
+		vgt_isol_pci_read_config_dword(dev_priv->bridge_dev, mchbar_reg, &temp);
+		vgt_isol_pci_write_config_dword(dev_priv->bridge_dev, mchbar_reg, temp | 1);
 	}
 }
 
@@ -299,13 +292,13 @@ intel_teardown_mchbar(struct drm_device *dev)
 
 	if (dev_priv->mchbar_need_disable) {
 		if (IS_I915G(dev) || IS_I915GM(dev)) {
-			pci_read_config_dword(dev_priv->bridge_dev, DEVEN_REG, &temp);
+			vgt_isol_pci_read_config_dword(dev_priv->bridge_dev, DEVEN_REG, &temp);
 			temp &= ~DEVEN_MCHBAR_EN;
-			pci_write_config_dword(dev_priv->bridge_dev, DEVEN_REG, temp);
+			vgt_isol_pci_write_config_dword(dev_priv->bridge_dev, DEVEN_REG, temp);
 		} else {
-			pci_read_config_dword(dev_priv->bridge_dev, mchbar_reg, &temp);
+			vgt_isol_pci_read_config_dword(dev_priv->bridge_dev, mchbar_reg, &temp);
 			temp &= ~1;
-			pci_write_config_dword(dev_priv->bridge_dev, mchbar_reg, temp);
+			vgt_isol_pci_write_config_dword(dev_priv->bridge_dev, mchbar_reg, temp);
 		}
 	}
 
@@ -441,8 +434,6 @@ static int i915_load_modeset_init(struct drm_device *dev)
 	 * scanning against hotplug events. Hence do this first and ignore the
 	 * tiny window where we will loose hotplug notifactions.
 	 */
-	async_fbdev_init_cfg_cookie =
-		async_schedule(intel_fbdev_initial_config, dev_priv);
 
 	drm_kms_helper_poll_init(dev);
 
@@ -889,6 +880,8 @@ static void intel_init_dpio(struct drm_i915_private *dev_priv)
 	}
 }
 
+int __init i2c_init(void);
+
 /**
  * i915_driver_load - setup chip and create an initial config
  * @dev: DRM device
@@ -968,7 +961,7 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 	else
 		mmio_size = 2*1024*1024;
 
-	dev_priv->regs = pci_iomap(dev->pdev, mmio_bar, mmio_size);
+	dev_priv->regs = vgt_isol_pci_iomap(dev->pdev, mmio_bar, mmio_size);
 	if (!dev_priv->regs) {
 		DRM_ERROR("failed to map registers\n");
 		ret = -EIO;
@@ -1063,33 +1056,16 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 	 * so there is no point in running more than one instance of the
 	 * workqueue at any time.  Use an ordered one.
 	 */
-	dev_priv->wq = alloc_ordered_workqueue("i915", 0);
-	if (dev_priv->wq == NULL) {
-		DRM_ERROR("Failed to create our workqueue.\n");
-		ret = -ENOMEM;
-		goto out_mtrrfree;
-	}
 
-	dev_priv->hotplug.dp_wq = alloc_ordered_workqueue("i915-dp", 0);
-	if (dev_priv->hotplug.dp_wq == NULL) {
-		DRM_ERROR("Failed to create our dp workqueue.\n");
-		ret = -ENOMEM;
-		goto out_freewq;
-	}
-
-	dev_priv->gpu_error.hangcheck_wq =
-		alloc_ordered_workqueue("i915-hangcheck", 0);
-	if (dev_priv->gpu_error.hangcheck_wq == NULL) {
-		DRM_ERROR("Failed to create our hangcheck workqueue.\n");
-		ret = -ENOMEM;
-		goto out_freedpwq;
-	}
 
 	intel_irq_init(dev_priv);
 	intel_uncore_sanitize(dev);
 
 	/* Try to make sure MCHBAR is enabled before poking at it */
 	intel_setup_mchbar(dev);
+
+	i2c_init();
+
 	intel_setup_gmbus(dev);
 	intel_opregion_setup(dev);
 
@@ -1134,7 +1110,6 @@ int i915_driver_load(struct drm_device *dev, unsigned long flags)
 	if (intel_vgpu_active(dev))
 		I915_WRITE(vgtif_reg(display_ready), VGT_DRV_DISPLAY_READY);
 
-	i915_setup_sysfs(dev);
 
 	if (INTEL_INFO(dev)->num_pipes) {
 		/* Must be done after probing outputs */

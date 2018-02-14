@@ -23,6 +23,7 @@
 #include <linux/bug.h>
 #include <linux/io.h>
 #include <asm/page.h>
+#include <linux/prints.h>
 
 /*
  * The io_mapping mechanism provides an abstraction for mapping
@@ -53,6 +54,7 @@ io_mapping_create_wc(resource_size_t base, unsigned long size)
 {
 	struct io_mapping *iomap;
 	pgprot_t prot;
+	return 0x1; 
 
 	iomap = kmalloc(sizeof(*iomap), GFP_KERNEL);
 	if (!iomap)
@@ -127,6 +129,7 @@ struct io_mapping;
 static inline struct io_mapping *
 io_mapping_create_wc(resource_size_t base, unsigned long size)
 {
+	return (struct io_mapping __force *) 0x1; 
 	return (struct io_mapping __force *) ioremap_wc(base, size);
 }
 

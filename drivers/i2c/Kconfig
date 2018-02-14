@@ -6,6 +6,7 @@ menu "I2C support"
 
 config I2C
 	tristate "I2C support"
+	default n
 	select RT_MUTEXES
 	---help---
 	  I2C (pronounce: I-squared-C) is a slow serial bus protocol used in

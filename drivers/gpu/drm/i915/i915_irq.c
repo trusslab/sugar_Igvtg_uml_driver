@@ -36,6 +36,9 @@
 #include "i915_drv.h"
 #include "i915_trace.h"
 #include "intel_drv.h"
+#include <drm/i915_vgt_isol.h>
+
+#define CPRINTK0 PRINTK0
 
 /**
  * DOC: interrupt handling
@@ -739,7 +742,7 @@ static u32 g4x_get_vblank_counter(struct drm_device *dev, unsigned int pipe)
 }
 
 /* raw reads, only for fast reads of display block, no need for forcewake etc. */
-#define __raw_i915_read32(dev_priv__, reg__) readl((dev_priv__)->regs + (reg__))
+#define __raw_i915_read32(dev_priv__, reg__) vgt_isol_readl((dev_priv__)->regs + (reg__))
 
 static int __intel_get_crtc_scanline(struct intel_crtc *crtc)
 {
@@ -999,10 +1002,12 @@ static void ironlake_rps_change_irq_handler(struct drm_device *dev)
 
 static void notify_ring(struct intel_engine_cs *ring)
 {
+	CPRINTK0("[1]\n");
 	if (!intel_ring_initialized(ring))
 		return;
 
 	trace_i915_gem_request_notify(ring);
+	CPRINTK0("[2]\n");
 
 	wake_up_all(&ring->irq_queue);
 }
@@ -1324,51 +1329,70 @@ static irqreturn_t gen8_gt_irq_handler(struct drm_i915_private *dev_priv,
 				       u32 master_ctl)
 {
 	irqreturn_t ret = IRQ_NONE;
+	CPRINTK0("[1]\n");
 
 	if (master_ctl & (GEN8_GT_RCS_IRQ | GEN8_GT_BCS_IRQ)) {
 		u32 iir = I915_READ_FW(GEN8_GT_IIR(0));
+		CPRINTK0("[2]\n");
 		if (iir) {
+			CPRINTK0("[3]\n");
 			I915_WRITE_FW(GEN8_GT_IIR(0), iir);
 			ret = IRQ_HANDLED;
+			CPRINTK0("[4]\n");
 
 			gen8_cs_irq_handler(&dev_priv->ring[RCS],
 					iir, GEN8_RCS_IRQ_SHIFT);
+			CPRINTK0("[5]\n");
 
 			gen8_cs_irq_handler(&dev_priv->ring[BCS],
 					iir, GEN8_BCS_IRQ_SHIFT);
+			CPRINTK0("[6]\n");
 		} else
 			DRM_ERROR("The master control interrupt lied (GT0)!\n");
 	}
+	CPRINTK0("[7]\n");
 
 	if (master_ctl & (GEN8_GT_VCS1_IRQ | GEN8_GT_VCS2_IRQ)) {
 		u32 iir = I915_READ_FW(GEN8_GT_IIR(1));
+		CPRINTK0("[8]\n");
 		if (iir) {
+			CPRINTK0("[9]\n");
 			I915_WRITE_FW(GEN8_GT_IIR(1), iir);
 			ret = IRQ_HANDLED;
+			CPRINTK0("[10]\n");
 
 			gen8_cs_irq_handler(&dev_priv->ring[VCS],
 					iir, GEN8_VCS1_IRQ_SHIFT);
+			CPRINTK0("[11]\n");
 
 			gen8_cs_irq_handler(&dev_priv->ring[VCS2],
 					iir, GEN8_VCS2_IRQ_SHIFT);
+			CPRINTK0("[12]\n");
 		} else
 			DRM_ERROR("The master control interrupt lied (GT1)!\n");
 	}
+	CPRINTK0("[13]\n");
 
 	if (master_ctl & GEN8_GT_VECS_IRQ) {
 		u32 iir = I915_READ_FW(GEN8_GT_IIR(3));
+		CPRINTK0("[14]\n");
 		if (iir) {
+			CPRINTK0("[15]\n");
 			I915_WRITE_FW(GEN8_GT_IIR(3), iir);
 			ret = IRQ_HANDLED;
+			CPRINTK0("[16]\n");
 
 			gen8_cs_irq_handler(&dev_priv->ring[VECS],
 					iir, GEN8_VECS_IRQ_SHIFT);
+			CPRINTK0("[17]\n");
 		} else
 			DRM_ERROR("The master control interrupt lied (GT3)!\n");
 	}
+	CPRINTK0("[18]\n");
 
 	if (master_ctl & GEN8_GT_PM_IRQ) {
 		u32 iir = I915_READ_FW(GEN8_GT_IIR(2));
+		CPRINTK0("[19]\n");
 		if (iir & dev_priv->pm_rps_events) {
 			I915_WRITE_FW(GEN8_GT_IIR(2),
 				      iir & dev_priv->pm_rps_events);
@@ -1631,8 +1655,9 @@ static void gen6_rps_irq_handler(struct drm_i915_private *dev_priv, u32 pm_iir)
 
 static bool intel_pipe_handle_vblank(struct drm_device *dev, enum pipe pipe)
 {
-	if (!drm_handle_vblank(dev, pipe))
+	if (!drm_handle_vblank(dev, pipe)) {
 		return false;
+	}
 
 	return true;
 }
@@ -2240,9 +2265,11 @@ static irqreturn_t gen8_irq_handler(int irq, void *arg)
 	uint32_t tmp = 0;
 	enum pipe pipe;
 	u32 aux_mask = GEN8_AUX_CHANNEL_A;
+	CPRINTK0("[1]\n");
 
 	if (!intel_irqs_enabled(dev_priv))
 		return IRQ_NONE;
+	CPRINTK0("[2]\n");
 
 	if (INTEL_INFO(dev_priv)->gen >= 9)
 		aux_mask |=  GEN9_AUX_CHANNEL_B | GEN9_AUX_CHANNEL_C |
@@ -2252,6 +2279,7 @@ static irqreturn_t gen8_irq_handler(int irq, void *arg)
 	master_ctl &= ~GEN8_MASTER_IRQ_CONTROL;
 	if (!master_ctl)
 		return IRQ_NONE;
+	CPRINTK0("[3]\n");
 
 	I915_WRITE_FW(GEN8_MASTER_IRQ, 0);
 
@@ -2272,6 +2300,7 @@ static irqreturn_t gen8_irq_handler(int irq, void *arg)
 		else
 			DRM_ERROR("The master control interrupt lied (DE MISC)!\n");
 	}
+	CPRINTK0("[4]\n");
 
 	if (master_ctl & GEN8_DE_PORT_IRQ) {
 		tmp = I915_READ(GEN8_DE_PORT_IIR);
@@ -2311,52 +2340,67 @@ static irqreturn_t gen8_irq_handler(int irq, void *arg)
 		else
 			DRM_ERROR("The master control interrupt lied (DE PORT)!\n");
 	}
+	CPRINTK0("[5]\n");
 
 	for_each_pipe(dev_priv, pipe) {
 		uint32_t pipe_iir, flip_done = 0, fault_errors = 0;
 
 		if (!(master_ctl & GEN8_DE_PIPE_IRQ(pipe)))
 			continue;
+		CPRINTK0("[5.1]\n");
 
 		pipe_iir = I915_READ(GEN8_DE_PIPE_IIR(pipe));
+		CPRINTK0("[5.2]\n");
 		if (pipe_iir) {
+			CPRINTK0("[5.3]\n");
 			ret = IRQ_HANDLED;
 			I915_WRITE(GEN8_DE_PIPE_IIR(pipe), pipe_iir);
+			CPRINTK0("[5.4]\n");
 
 			if (pipe_iir & GEN8_PIPE_VBLANK &&
-			    intel_pipe_handle_vblank(dev, pipe))
+			    intel_pipe_handle_vblank(dev, pipe)) {
+				CPRINTK0("[5.41]\n");
 				intel_check_page_flip(dev, pipe);
+			}
+			CPRINTK0("[5.5]\n");
 
 			if (INTEL_INFO(dev_priv)->gen >= 9)
 				flip_done = pipe_iir & GEN9_PIPE_PLANE1_FLIP_DONE;
 			else
 				flip_done = pipe_iir & GEN8_PIPE_PRIMARY_FLIP_DONE;
+			CPRINTK0("[5.6]\n");
 
 			if (flip_done) {
 				intel_prepare_page_flip(dev, pipe);
 				intel_finish_page_flip_plane(dev, pipe);
 			}
+			CPRINTK0("[5.7]\n");
 
 			if (pipe_iir & GEN8_PIPE_CDCLK_CRC_DONE)
 				hsw_pipe_crc_irq_handler(dev, pipe);
+			CPRINTK0("[5.8]\n");
 
 			if (pipe_iir & GEN8_PIPE_FIFO_UNDERRUN)
 				intel_cpu_fifo_underrun_irq_handler(dev_priv,
 								    pipe);
+			CPRINTK0("[5.9]\n");
 
 
 			if (INTEL_INFO(dev_priv)->gen >= 9)
 				fault_errors = pipe_iir & GEN9_DE_PIPE_IRQ_FAULT_ERRORS;
 			else
 				fault_errors = pipe_iir & GEN8_DE_PIPE_IRQ_FAULT_ERRORS;
+			CPRINTK0("[5.10]\n");
 
 			if (fault_errors)
 				DRM_ERROR("Fault errors on pipe %c\n: 0x%08x",
 					  pipe_name(pipe),
 					  pipe_iir & GEN8_DE_PIPE_IRQ_FAULT_ERRORS);
+			CPRINTK0("[5.11]\n");
 		} else
 			DRM_ERROR("The master control interrupt lied (DE PIPE)!\n");
 	}
+	CPRINTK0("[6]\n");
 
 	if (HAS_PCH_SPLIT(dev) && !HAS_PCH_NOP(dev) &&
 	    master_ctl & GEN8_DE_PCH_IRQ) {
@@ -2385,6 +2429,7 @@ static irqreturn_t gen8_irq_handler(int irq, void *arg)
 
 	I915_WRITE_FW(GEN8_MASTER_IRQ, GEN8_MASTER_IRQ_CONTROL);
 	POSTING_READ_FW(GEN8_MASTER_IRQ);
+	CPRINTK0("[7]: ret = %d\n", ret);
 
 	return ret;
 }

@@ -160,6 +160,8 @@ extern int os_file_type(char *file);
 extern int os_file_mode(const char *file, struct openflags *mode_out);
 extern int os_lock_file(int fd, int excl);
 extern void os_flush_stdout(void);
+extern int os_lock_memory(void *addr, unsigned long len);
+int um_map_in_iommu(void *vaddr);
 extern int os_stat_filesystem(char *path, long *bsize_out,
 			      long long *blocks_out, long long *bfree_out,
 			      long long *bavail_out, long long *files_out,

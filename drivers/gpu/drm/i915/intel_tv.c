@@ -37,6 +37,7 @@
 #include "intel_drv.h"
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
+#include <linux/prints.h>
 
 enum tv_margin {
 	TV_MARGIN_LEFT, TV_MARGIN_TOP,

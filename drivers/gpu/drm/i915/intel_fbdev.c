@@ -711,6 +711,14 @@ void intel_fbdev_initial_config(void *data, async_cookie_t cookie)
 	drm_fb_helper_initial_config(&ifbdev->helper, ifbdev->preferred_bpp);
 }
 
+void intel_fbdev_initial_config_sync(struct drm_i915_private *dev_priv)
+{
+	struct intel_fbdev *ifbdev = dev_priv->fbdev;
+
+	/* Due to peculiar init order wrt to hpd handling this is separate. */
+	drm_fb_helper_initial_config(&ifbdev->helper, ifbdev->preferred_bpp);
+}
+
 void intel_fbdev_fini(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;

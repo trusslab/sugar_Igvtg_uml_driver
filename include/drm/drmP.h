@@ -164,8 +164,8 @@ void drm_err(const char *format, ...);
  * \param fmt printf() like format string.
  * \param arg arguments
  */
-#define DRM_ERROR(fmt, ...)				\
-	drm_err(fmt, ##__VA_ARGS__)
+#define DRM_ERROR(fmt, args...)				\
+	printk("DRM Error: %s: " fmt, __func__, ##args)
 
 /**
  * Rate limited error output.  Like DRM_ERROR() but won't flood the log.
@@ -1074,25 +1074,10 @@ void drm_pci_agp_destroy(struct drm_device *dev);
 
 extern int drm_pci_init(struct drm_driver *driver, struct pci_driver *pdriver);
 extern void drm_pci_exit(struct drm_driver *driver, struct pci_driver *pdriver);
-#ifdef CONFIG_PCI
 extern int drm_get_pci_dev(struct pci_dev *pdev,
 			   const struct pci_device_id *ent,
 			   struct drm_driver *driver);
 extern int drm_pci_set_busid(struct drm_device *dev, struct drm_master *master);
-#else
-static inline int drm_get_pci_dev(struct pci_dev *pdev,
-				  const struct pci_device_id *ent,
-				  struct drm_driver *driver)
-{
-	return -ENOSYS;
-}
-
-static inline int drm_pci_set_busid(struct drm_device *dev,
-				    struct drm_master *master)
-{
-	return -ENOSYS;
-}
-#endif
 
 #define DRM_PCIE_SPEED_25 1
 #define DRM_PCIE_SPEED_50 2

@@ -16,6 +16,7 @@
 #include <init.h>
 #include <longjmp.h>
 #include <os.h>
+#include "../isol_prints.h"
 
 #define ARBITRARY_ADDR -1
 #define FAILURE_PID    -1
@@ -129,6 +130,9 @@ int os_getpgrp(void)
 	return getpgrp();
 }
 
+int um_pin_memory(unsigned long start_page, unsigned long num_pages);
+int um_unpin_memory(unsigned long start_page, unsigned long num_pages);
+
 int os_map_memory(void *virt, int fd, unsigned long long off, unsigned long len,
 		  int r, int w, int x)
 {
@@ -142,6 +146,9 @@ int os_map_memory(void *virt, int fd, unsigned long long off, unsigned long len,
 		     fd, off);
 	if (loc == MAP_FAILED)
 		return -errno;
+
+	um_pin_memory(((unsigned long) virt) >> 12, ((unsigned long) len) >> 12);
+
 	return 0;
 }
 
@@ -151,6 +158,15 @@ int os_protect_memory(void *addr, unsigned long len, int r, int w, int x)
 		    (x ? PROT_EXEC : 0));
 
 	if (mprotect(addr, len, prot) < 0)
+		return -errno;
+
+	return 0;
+}
+
+int os_lock_memory(void *addr, unsigned long len)
+{	
+	
+	if (mlock(addr, len) < 0)
 		return -errno;
 
 	return 0;
@@ -278,4 +294,7 @@ void init_new_thread_signals(void)
 	signal(SIGHUP, SIG_IGN);
 	set_handler(SIGIO);
 	signal(SIGWINCH, SIG_IGN);
+	set_handler(SIGUSR1);
+	set_handler(SIGINT);
+	set_handler(SIGTERM);
 }

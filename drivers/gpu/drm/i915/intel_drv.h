@@ -46,19 +46,8 @@
  * we've never had a chance to check the condition before the timeout.
  */
 #define _wait_for(COND, MS, W) ({ \
-	unsigned long timeout__ = jiffies + msecs_to_jiffies(MS) + 1;	\
 	int ret__ = 0;							\
 	while (!(COND)) {						\
-		if (time_after(jiffies, timeout__)) {			\
-			if (!(COND))					\
-				ret__ = -ETIMEDOUT;			\
-			break;						\
-		}							\
-		if ((W) && drm_can_sleep()) {				\
-			usleep_range((W)*1000, (W)*2000);		\
-		} else {						\
-			cpu_relax();					\
-		}							\
 	}								\
 	ret__;								\
 })
@@ -72,7 +61,6 @@
 			ret__ = -ETIMEDOUT;				\
 			break;						\
 		}							\
-		udelay(10);						\
 	}								\
 	ret__;								\
 })
@@ -1281,6 +1269,7 @@ void intel_dvo_init(struct drm_device *dev);
 #ifdef CONFIG_DRM_FBDEV_EMULATION
 extern int intel_fbdev_init(struct drm_device *dev);
 extern void intel_fbdev_initial_config(void *data, async_cookie_t cookie);
+extern void intel_fbdev_initial_config_sync(struct drm_i915_private *dev_priv);
 extern void intel_fbdev_fini(struct drm_device *dev);
 extern void intel_fbdev_set_suspend(struct drm_device *dev, int state, bool synchronous);
 extern void intel_fbdev_output_poll_changed(struct drm_device *dev);

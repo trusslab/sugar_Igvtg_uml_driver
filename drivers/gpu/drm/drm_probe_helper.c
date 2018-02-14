@@ -126,6 +126,7 @@ void drm_kms_helper_poll_enable_locked(struct drm_device *dev)
 }
 EXPORT_SYMBOL(drm_kms_helper_poll_enable_locked);
 
+static void __output_poll_execute(struct work_struct *work, bool locked);
 
 static int drm_helper_probe_single_connector_modes_merge_bits(struct drm_connector *connector,
 							      uint32_t maxX, uint32_t maxY, bool merge_type_bits)
@@ -180,8 +181,7 @@ static int drm_helper_probe_single_connector_modes_merge_bits(struct drm_connect
 			 */
 			dev->mode_config.delayed_event = true;
 			if (dev->mode_config.poll_enabled)
-				schedule_delayed_work(&dev->mode_config.output_poll_work,
-						      0);
+				__output_poll_execute(&dev->mode_config.output_poll_work.work, true);
 		}
 	}
 
@@ -329,7 +329,7 @@ void drm_kms_helper_hotplug_event(struct drm_device *dev)
 }
 EXPORT_SYMBOL(drm_kms_helper_hotplug_event);
 
-static void output_poll_execute(struct work_struct *work)
+static void __output_poll_execute(struct work_struct *work, bool locked)
 {
 	struct delayed_work *delayed_work = to_delayed_work(work);
 	struct drm_device *dev = container_of(delayed_work, struct drm_device, mode_config.output_poll_work);
@@ -344,7 +344,8 @@ static void output_poll_execute(struct work_struct *work)
 	if (!drm_kms_helper_poll)
 		goto out;
 
-	mutex_lock(&dev->mode_config.mutex);
+	if (!locked)
+		mutex_lock(&dev->mode_config.mutex);
 	drm_for_each_connector(connector, dev) {
 
 		/* Ignore forced connectors. */
@@ -400,14 +401,20 @@ static void output_poll_execute(struct work_struct *work)
 		}
 	}
 
-	mutex_unlock(&dev->mode_config.mutex);
+	if (!locked)
+		mutex_unlock(&dev->mode_config.mutex);
 
 out:
 	if (changed)
 		drm_kms_helper_hotplug_event(dev);
 
-	if (repoll)
-		schedule_delayed_work(delayed_work, DRM_OUTPUT_POLL_PERIOD);
+	if (repoll) {
+		__output_poll_execute(delayed_work, locked);
+	}
+}
+
+static void output_poll_execute(struct work_struct *work) {
+	__output_poll_execute(work, false);
 }
 
 /**

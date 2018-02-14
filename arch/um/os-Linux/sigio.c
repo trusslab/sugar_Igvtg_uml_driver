@@ -463,19 +463,9 @@ static void __init check_one_sigio(void (*proc)(int, int))
 		return;
 	}
 
-	if (sigaction(SIGIO, NULL, &old) < 0) {
-		printk(UM_KERN_ERR "check_one_sigio : sigaction 1 failed, "
-		       "errno = %d\n", errno);
-		return;
-	}
 
 	new = old;
 	new.sa_handler = handler;
-	if (sigaction(SIGIO, &new, NULL) < 0) {
-		printk(UM_KERN_ERR "check_one_sigio : sigaction 2 failed, "
-		       "errno = %d\n", errno);
-		return;
-	}
 
 	got_sigio = 0;
 	(*proc)(master, slave);
@@ -483,9 +473,6 @@ static void __init check_one_sigio(void (*proc)(int, int))
 	close(master);
 	close(slave);
 
-	if (sigaction(SIGIO, &old, NULL) < 0)
-		printk(UM_KERN_ERR "check_one_sigio : sigaction 3 failed, "
-		       "errno = %d\n", errno);
 }
 
 static void tty_output(int master, int slave)

@@ -1186,7 +1186,8 @@ EXPORT_SYMBOL_GPL(device_add);
 int device_register(struct device *dev)
 {
 	device_initialize(dev);
-	return device_add(dev);
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(device_register);
 

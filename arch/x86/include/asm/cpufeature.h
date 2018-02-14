@@ -1,7 +1,7 @@
 /*
  * Defines x86 CPU feature bits
  */
-#ifndef _ASM_X86_CPUFEATURE_H
+#ifdef _ASM_X86_CPUFEATURE_H
 #define _ASM_X86_CPUFEATURE_H
 
 #ifndef _ASM_X86_REQUIRED_FEATURES_H

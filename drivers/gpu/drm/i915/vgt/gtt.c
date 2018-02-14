@@ -314,6 +314,7 @@ For Gen8 platform.
 PAT: bit 7, PCD: bit 4, PWT: bit 3.
 index: index = 4*PAT+2*PCD+PWT
 */
+
 static unsigned long gen8_get_pat_index(gtt_entry_t *e)
 {
 	u8 index = 0;

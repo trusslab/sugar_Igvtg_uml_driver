@@ -9,6 +9,8 @@ config UML
 	select GENERIC_IO
 	select GENERIC_CLOCKEVENTS
 	select TTY # Needed for line.c
+	# Ardalan
+	select ARCH_HAS_SG_CHAIN
 
 config MMU
 	bool

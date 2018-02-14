@@ -27,6 +27,7 @@
 #include <kern_util.h>
 #include <os.h>
 #include <skas.h>
+#include <linux/prints.h>
 
 /*
  * This is a per-cpu array.  A processor only modifies its entry and it only
@@ -73,6 +74,48 @@ static inline void set_current(struct task_struct *task)
 {
 	cpu_tasks[task_thread_info(task)->cpu] = ((struct cpu_task)
 		{ external_pid(), task });
+}
+
+struct task_struct isol_tsk;
+struct task_struct *isol_task = NULL;
+
+unsigned long get_sbrk_val(void);
+static unsigned long last_unmapped_val = 0;
+
+static unsigned long um_get_unmapped_area(struct file *filp,
+			unsigned long addr, unsigned long len,
+			unsigned long pgoff, unsigned long flags)
+{
+	unsigned long return_val = 0;
+	unsigned long sbrk_val = get_sbrk_val();
+
+	BUG();
+
+	if (sbrk_val >= last_unmapped_val)
+		return_val = sbrk_val;
+	else
+		return_val = last_unmapped_val;
+
+	last_unmapped_val = return_val + len;
+
+	return return_val;
+}
+
+void isol_set_current(void)
+{
+	if (isol_task == NULL) {
+		memcpy(&isol_tsk, &init_task, sizeof(struct task_struct));
+		isol_task = &isol_tsk;
+	}		
+	
+	/* We don't want in_interrupt() to be true */
+	current_thread_info()->preempt_count = 0;
+
+	if (!current->mm)
+		current->mm = kzalloc(sizeof(struct mm_struct), GFP_KERNEL);
+	
+	if (current->mm)
+		current->mm->get_unmapped_area = um_get_unmapped_area;
 }
 
 extern void arch_switch_to(struct task_struct *to);

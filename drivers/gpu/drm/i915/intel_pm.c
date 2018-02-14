@@ -4991,7 +4991,7 @@ static void __gen6_update_ring_freq(struct drm_device *dev)
 		 * Default to measured freq if none found, PCU will ensure we
 		 * don't go over
 		 */
-		max_ia_freq = tsc_khz;
+		BUG();
 	}
 
 	/* Convert from kHz to MHz */
@@ -7183,8 +7183,7 @@ int sandybridge_pcode_write(struct drm_i915_private *dev_priv, u32 mbox, u32 val
 	I915_WRITE(GEN6_PCODE_DATA, val);
 	I915_WRITE(GEN6_PCODE_MAILBOX, GEN6_PCODE_READY | mbox);
 
-	if (wait_for((I915_READ(GEN6_PCODE_MAILBOX) & GEN6_PCODE_READY) == 0,
-		     500)) {
+	if (!((I915_READ(GEN6_PCODE_MAILBOX) & GEN6_PCODE_READY) == 0)) {
 		DRM_ERROR("timeout waiting for pcode write (%d) to finish\n", mbox);
 		return -ETIMEDOUT;
 	}

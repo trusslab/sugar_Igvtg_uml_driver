@@ -73,6 +73,7 @@ free_gem:
 	return ret;
 }
 
+
 /*
  * Macro to add commands to auxiliary batch.
  * This macro only checks for page overflow before inserting the commands,

@@ -625,6 +625,7 @@ static int drm_mmap_locked(struct file *filp, struct vm_area_struct *vma)
 		vma->vm_ops = &drm_vm_ops;
 		break;
 	case _DRM_CONSISTENT:
+		BUG();
 		/* Consistent memory is really like shared memory. But
 		 * it's allocated in a different way, so avoid fault */
 		if (remap_pfn_range(vma, vma->vm_start,

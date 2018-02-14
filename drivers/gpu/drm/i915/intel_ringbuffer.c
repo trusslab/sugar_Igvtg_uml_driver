@@ -2165,7 +2165,7 @@ int intel_pin_and_map_ringbuffer_obj(struct drm_device *dev,
 			return ret;
 		}
 
-		ringbuf->virtual_start = vmap_obj(obj);
+		ringbuf->virtual_start = vgt_isol_shmem_kmap_page(&obj->base, 0);
 		if (ringbuf->virtual_start == NULL) {
 			i915_gem_object_ggtt_unpin(obj);
 			return -ENOMEM;

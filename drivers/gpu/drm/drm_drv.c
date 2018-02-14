@@ -36,6 +36,7 @@
 #include <drm/drm_core.h>
 #include "drm_legacy.h"
 #include "drm_internal.h"
+#include <linux/prints.h>
 
 unsigned int drm_debug = 0;	/* bitmask of DRM_UT_x */
 EXPORT_SYMBOL(drm_debug);
@@ -304,15 +305,7 @@ static int drm_minor_register(struct drm_device *dev, unsigned int type)
 	if (!minor)
 		return 0;
 
-	ret = drm_debugfs_init(minor, minor->index, drm_debugfs_root);
-	if (ret) {
-		DRM_ERROR("DRM: Failed to initialize /sys/kernel/debug/dri.\n");
-		return ret;
-	}
 
-	ret = device_add(minor->kdev);
-	if (ret)
-		goto err_debugfs;
 
 	/* replace NULL with @minor so lookups will succeed from now on */
 	spin_lock_irqsave(&drm_minor_lock, flags);
@@ -323,7 +316,6 @@ static int drm_minor_register(struct drm_device *dev, unsigned int type)
 	return 0;
 
 err_debugfs:
-	drm_debugfs_cleanup(minor);
 	return ret;
 }
 
@@ -590,19 +582,12 @@ struct drm_device *drm_dev_alloc(struct drm_driver *driver,
 	mutex_init(&dev->ctxlist_mutex);
 	mutex_init(&dev->master_mutex);
 
-	dev->anon_inode = drm_fs_inode_new();
-	if (IS_ERR(dev->anon_inode)) {
-		ret = PTR_ERR(dev->anon_inode);
-		DRM_ERROR("Cannot allocate anonymous inode: %d\n", ret);
-		goto err_free;
-	}
 
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
 		ret = drm_minor_alloc(dev, DRM_MINOR_CONTROL);
 		if (ret)
 			goto err_minors;
 
-		WARN_ON(driver->suspend || driver->resume);
 	}
 
 	if (drm_core_check_feature(dev, DRIVER_RENDER)) {
@@ -644,6 +629,8 @@ err_free:
 	return NULL;
 }
 EXPORT_SYMBOL(drm_dev_alloc);
+
+void destroy_vgt_instance(void);
 
 static void drm_dev_release(struct kref *ref)
 {
@@ -876,39 +863,14 @@ static const struct file_operations drm_stub_fops = {
 
 static int __init drm_core_init(void)
 {
-	int ret = -ENOMEM;
 
-	drm_global_init();
-	drm_connector_ida_init();
 	idr_init(&drm_minors_idr);
 
-	if (register_chrdev(DRM_MAJOR, "drm", &drm_stub_fops))
-		goto err_p1;
 
-	ret = drm_sysfs_init();
-	if (ret < 0) {
-		printk(KERN_ERR "DRM: Error creating drm class.\n");
-		goto err_p2;
-	}
 
-	drm_debugfs_root = debugfs_create_dir("dri", NULL);
-	if (!drm_debugfs_root) {
-		DRM_ERROR("Cannot create /sys/kernel/debug/dri\n");
-		ret = -1;
-		goto err_p3;
-	}
 
-	DRM_INFO("Initialized %s %d.%d.%d %s\n",
-		 CORE_NAME, CORE_MAJOR, CORE_MINOR, CORE_PATCHLEVEL, CORE_DATE);
+
 	return 0;
-err_p3:
-	drm_sysfs_destroy();
-err_p2:
-	unregister_chrdev(DRM_MAJOR, "drm");
-
-	idr_destroy(&drm_minors_idr);
-err_p1:
-	return ret;
 }
 
 static void __exit drm_core_exit(void)
@@ -921,6 +883,18 @@ static void __exit drm_core_exit(void)
 	drm_connector_ida_destroy();
 	idr_destroy(&drm_minors_idr);
 }
+
+#ifdef CONFIG_ISOL_USER
+
+int __init drm_user_init(void)
+{
+	
+	drm_core_init();
+	
+	return 0;
+}
+
+#endif
 
 module_init(drm_core_init);
 module_exit(drm_core_exit);

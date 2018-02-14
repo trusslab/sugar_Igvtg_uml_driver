@@ -30,6 +30,9 @@
 #include "vgt.h"
 #include <drm/intel-gtt.h>
 #include <asm/cacheflush.h>
+#include <drm/i915_vgt_isol.h>
+
+#define pfn_to_kaddr(pfn)      __va((pfn) << PAGE_SHIFT)
 
 bool inline is_execlist_mode(struct pgt_device *pdev, int ring_id)
 {
@@ -705,19 +708,19 @@ uint64_t pci_bar_size(struct pgt_device *pdev, unsigned int bar_off)
 	uint64_t bar_size, bar_upper_size = 0;
 	struct pci_dev *dev = pdev->pdev;
 
-	pci_read_config_dword(dev, bar_off, (uint32_t *)&bar_s);
-	pci_write_config_dword(dev, bar_off, 0xFFFFFFFF);
-	pci_read_config_dword(dev, bar_off, (uint32_t *)&bar_size);
+	vgt_isol_pci_read_config_dword(dev, bar_off, (uint32_t *)&bar_s);
+	vgt_isol_pci_write_config_dword(dev, bar_off, 0xFFFFFFFF);
+	vgt_isol_pci_read_config_dword(dev, bar_off, (uint32_t *)&bar_size);
 	vgt_dbg(VGT_DBG_GENERIC, "read back lower bar size %x\n", (uint32_t)bar_size);
 	bar_size &= ~0xf; /* bit 4-31 */
-	pci_write_config_dword(dev, bar_off, bar_s);
+	vgt_isol_pci_write_config_dword(dev, bar_off, bar_s);
 	if (VGT_GET_BITS(bar_s, 2, 1) == 2) {
-		pci_read_config_dword(dev, bar_off + 4, (uint32_t *)&bar_s);
-		pci_write_config_dword(dev, bar_off + 4, 0xFFFFFFFF);
-		pci_read_config_dword(dev, bar_off + 4, (uint32_t *)&bar_upper_size);
+		vgt_isol_pci_read_config_dword(dev, bar_off + 4, (uint32_t *)&bar_s);
+		vgt_isol_pci_write_config_dword(dev, bar_off + 4, 0xFFFFFFFF);
+		vgt_isol_pci_read_config_dword(dev, bar_off + 4, (uint32_t *)&bar_upper_size);
 		vgt_dbg(VGT_DBG_GENERIC, "read back higher bar size %x\n", (uint32_t)bar_upper_size);
 		bar_size |= (bar_upper_size << 32);
-		pci_write_config_dword(dev, bar_off + 4, bar_s);
+		vgt_isol_pci_write_config_dword(dev, bar_off + 4, bar_s);
 	}
 	bar_size &= ~(bar_size - 1);
 	return bar_size;
@@ -892,8 +895,9 @@ int setup_gtt(struct pgt_device *pdev)
 		goto err_out;
 	}
 
-	printk("....dummy page (0x%llx, 0x%llx)\n", page_to_phys(dummy_page), dma_addr);
+	printk("....dummy page (0x%llx)\n", (unsigned long long) dma_addr);
 
+	BUG();
 	/* for debug purpose */
 	memset(pfn_to_kaddr(page_to_pfn(dummy_page)), 0x77, PAGE_SIZE);
 
@@ -934,7 +938,7 @@ int setup_gtt(struct pgt_device *pdev)
 		/* dom0 needs DMAR anyway */
 		dma_addr = pci_map_page(pdev->pdev, page, 0, PAGE_SIZE, PCI_DMA_BIDIRECTIONAL);
 		if (pci_dma_mapping_error(pdev->pdev, dma_addr)) {
-			printk(KERN_ERR "vGT: Failed to do pci_dma_mapping while handling %d 0x%llx\n", i, dma_addr);
+			printk(KERN_ERR "vGT: Failed to do pci_dma_mapping while handling %d 0x%llx\n", i, (unsigned long long) dma_addr);
 			ret = -EINVAL;
 			goto err_out;
 		}
@@ -943,8 +947,8 @@ int setup_gtt(struct pgt_device *pdev)
 		ops->set_entry(NULL, &e, index + i, false, NULL);
 
 		if (!(i % 1024))
-			vgt_dbg(VGT_DBG_MEM, "vGT: write GTT-%x phys: %llx, dma: %llx\n",
-				index + i, page_to_phys(page), dma_addr);
+			vgt_dbg(VGT_DBG_MEM, "vGT: write GTT-%x dma: %llx\n",
+				index + i, (unsigned long long) dma_addr);
 	}
 
 	check_gtt(pdev);

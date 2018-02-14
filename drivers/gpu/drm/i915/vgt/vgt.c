@@ -28,7 +28,14 @@
 #include <linux/freezer.h>
 
 #include "vgt.h"
+#include <linux/prints.h>
 
+#define xen_domain() false
+#define xen_initial_domain() false
+static inline void __symbol_put(const char *symbol)
+{
+	BUG();
+}
 
 MODULE_AUTHOR("Intel Corporation");
 MODULE_DESCRIPTION("Virtual GPU device model for Intel Processor Graphics");

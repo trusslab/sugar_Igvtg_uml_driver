@@ -30,6 +30,7 @@
 #include <linux/dma-buf.h>
 #include <drm/drmP.h>
 #include <drm/drm_gem.h>
+#include <drm/i915_vgt_isol.h>
 
 #include "drm_internal.h"
 
@@ -457,7 +458,7 @@ out_have_obj:
 		goto fail_put_dmabuf;
 
 out_have_handle:
-	ret = dma_buf_fd(dmabuf, flags);
+	ret = vgt_isol_dma_buf_fd(dmabuf, flags);
 	/*
 	 * We must _not_ remove the buffer from the handle cache since the newly
 	 * created dma buf is already linked in the global obj->dma_buf pointer,

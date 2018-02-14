@@ -162,7 +162,6 @@ static int winch_thread(void *arg)
 	 * SIGWINCH.
 	 */
 
-	signal(SIGWINCH, winch_handler);
 	sigfillset(&sigs);
 	/* Block all signals possible. */
 	if (sigprocmask(SIG_SETMASK, &sigs, NULL) < 0) {

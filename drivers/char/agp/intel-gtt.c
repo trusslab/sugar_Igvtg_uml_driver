@@ -24,7 +24,10 @@
 #include <asm/smp.h>
 #include "agp.h"
 #include "intel-agp.h"
+#include <linux/scatterlist.h>
 #include <drm/intel-gtt.h>
+#include <asm/io.h>
+#include <linux/dma-mapping.h> 
 
 /*
  * If we have Intel graphics, we're not going to have anything other than

@@ -33,6 +33,7 @@
 #include <linux/seq_file.h>
 #include <linux/poll.h>
 #include <linux/reservation.h>
+#include <linux/prints.h>
 
 static inline int is_dma_buf_file(struct file *);
 
@@ -266,6 +267,9 @@ static inline int is_dma_buf_file(struct file *file)
 	return file->f_op == &dma_buf_fops;
 }
 
+struct file gfile;
+struct file *g_file = &gfile;
+
 /**
  * dma_buf_export - Creates a new dma_buf, and associates an anon file
  * with this buffer, so it can be exported.
@@ -329,8 +333,7 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	}
 	dmabuf->resv = resv;
 
-	file = anon_inode_getfile("dmabuf", &dma_buf_fops, dmabuf,
-					exp_info->flags);
+	file = g_file;
 	if (IS_ERR(file)) {
 		kfree(dmabuf);
 		return ERR_CAST(file);
@@ -338,6 +341,7 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 
 	file->f_mode |= FMODE_LSEEK;
 	dmabuf->file = file;
+	return dmabuf;
 
 	mutex_init(&dmabuf->lock);
 	INIT_LIST_HEAD(&dmabuf->attachments);

@@ -39,6 +39,7 @@
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 #include <linux/acpi.h>
+#include <linux/prints.h>
 
 /* Private structure for the integrated LVDS support */
 struct intel_lvds_connector {

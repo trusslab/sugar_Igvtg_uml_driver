@@ -26,9 +26,12 @@
 #include "i915_vgpu.h"
 
 #include <linux/pm_runtime.h>
+#include <drm/i915_vgt_isol.h>
 
 #define FORCEWAKE_ACK_TIMEOUT_MS 50
 
+
+#ifndef VGT_MMIO_SYSFS
 #define __raw_i915_read8(dev_priv__, reg__) readb((dev_priv__)->regs + (reg__))
 #define __raw_i915_write8(dev_priv__, reg__, val__) writeb(val__, (dev_priv__)->regs + (reg__))
 
@@ -40,6 +43,19 @@
 
 #define __raw_i915_read64(dev_priv__, reg__) readq((dev_priv__)->regs + (reg__))
 #define __raw_i915_write64(dev_priv__, reg__, val__) writeq(val__, (dev_priv__)->regs + (reg__))
+#else /* !VGT_MMIO_SYSFS */
+#define __raw_i915_read8(dev_priv__, reg__) vgt_isol_readb((dev_priv__)->regs + (reg__))
+#define __raw_i915_write8(dev_priv__, reg__, val__) vgt_isol_writeb(val__, (dev_priv__)->regs + (reg__))
+
+#define __raw_i915_read16(dev_priv__, reg__) vgt_isol_readw((dev_priv__)->regs + (reg__))
+#define __raw_i915_write16(dev_priv__, reg__, val__) vgt_isol_writew(val__, (dev_priv__)->regs + (reg__))
+
+#define __raw_i915_read32(dev_priv__, reg__) vgt_isol_readl((dev_priv__)->regs + (reg__))
+#define __raw_i915_write32(dev_priv__, reg__, val__) vgt_isol_writel(val__, (dev_priv__)->regs + (reg__))
+
+#define __raw_i915_read64(dev_priv__, reg__) vgt_isol_readq((dev_priv__)->regs + (reg__))
+#define __raw_i915_write64(dev_priv__, reg__, val__) vgt_isol_writeq(val__, (dev_priv__)->regs + (reg__))
+#endif /* !VGT_MMIO_SYSFS */
 
 #define __raw_posting_read(dev_priv__, reg__) (void)__raw_i915_read32(dev_priv__, reg__)
 
@@ -1410,16 +1426,16 @@ int i915_get_reset_stats_ioctl(struct drm_device *dev,
 static int i915_reset_complete(struct drm_device *dev)
 {
 	u8 gdrst;
-	pci_read_config_byte(dev->pdev, I915_GDRST, &gdrst);
+	vgt_isol_pci_read_config_byte(dev->pdev, I915_GDRST, &gdrst);
 	return (gdrst & GRDOM_RESET_STATUS) == 0;
 }
 
 static int i915_do_reset(struct drm_device *dev)
 {
 	/* assert reset for at least 20 usec */
-	pci_write_config_byte(dev->pdev, I915_GDRST, GRDOM_RESET_ENABLE);
+	vgt_isol_pci_write_config_byte(dev->pdev, I915_GDRST, GRDOM_RESET_ENABLE);
 	udelay(20);
-	pci_write_config_byte(dev->pdev, I915_GDRST, 0);
+	vgt_isol_pci_write_config_byte(dev->pdev, I915_GDRST, 0);
 
 	return wait_for(i915_reset_complete(dev), 500);
 }
@@ -1427,13 +1443,13 @@ static int i915_do_reset(struct drm_device *dev)
 static int g4x_reset_complete(struct drm_device *dev)
 {
 	u8 gdrst;
-	pci_read_config_byte(dev->pdev, I915_GDRST, &gdrst);
+	vgt_isol_pci_read_config_byte(dev->pdev, I915_GDRST, &gdrst);
 	return (gdrst & GRDOM_RESET_ENABLE) == 0;
 }
 
 static int g33_do_reset(struct drm_device *dev)
 {
-	pci_write_config_byte(dev->pdev, I915_GDRST, GRDOM_RESET_ENABLE);
+	vgt_isol_pci_write_config_byte(dev->pdev, I915_GDRST, GRDOM_RESET_ENABLE);
 	return wait_for(g4x_reset_complete(dev), 500);
 }
 
@@ -1442,7 +1458,7 @@ static int g4x_do_reset(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret;
 
-	pci_write_config_byte(dev->pdev, I915_GDRST,
+	vgt_isol_pci_write_config_byte(dev->pdev, I915_GDRST,
 			      GRDOM_RENDER | GRDOM_RESET_ENABLE);
 	ret =  wait_for(g4x_reset_complete(dev), 500);
 	if (ret)
@@ -1452,7 +1468,7 @@ static int g4x_do_reset(struct drm_device *dev)
 	I915_WRITE(VDECCLK_GATE_D, I915_READ(VDECCLK_GATE_D) | VCP_UNIT_CLOCK_GATE_DISABLE);
 	POSTING_READ(VDECCLK_GATE_D);
 
-	pci_write_config_byte(dev->pdev, I915_GDRST,
+	vgt_isol_pci_write_config_byte(dev->pdev, I915_GDRST,
 			      GRDOM_MEDIA | GRDOM_RESET_ENABLE);
 	ret =  wait_for(g4x_reset_complete(dev), 500);
 	if (ret)
@@ -1462,7 +1478,7 @@ static int g4x_do_reset(struct drm_device *dev)
 	I915_WRITE(VDECCLK_GATE_D, I915_READ(VDECCLK_GATE_D) & ~VCP_UNIT_CLOCK_GATE_DISABLE);
 	POSTING_READ(VDECCLK_GATE_D);
 
-	pci_write_config_byte(dev->pdev, I915_GDRST, 0);
+	vgt_isol_pci_write_config_byte(dev->pdev, I915_GDRST, 0);
 
 	return 0;
 }

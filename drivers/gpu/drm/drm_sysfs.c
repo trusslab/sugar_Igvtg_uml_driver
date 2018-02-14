@@ -494,6 +494,7 @@ static const struct attribute_group *connector_dev_groups[] = {
 int drm_sysfs_connector_add(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
+	return 0;
 
 	if (connector->kdev)
 		return 0;

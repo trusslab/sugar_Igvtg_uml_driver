@@ -68,6 +68,7 @@ static int vgt_mmio_dev_mmap(struct file *filp, struct vm_area_struct *vma)
 	 *    page requested is more efficient
 	 */
 	vma->vm_ops = &vgt_mmio_dev_vm_ops;
+	BUG();
 	/* mark the page as read-only */
 	pgprot_val(vma->vm_page_prot) &= ~_PAGE_RW;
 	return 0;

@@ -34,6 +34,7 @@
 #include <linux/moduleparam.h>
 #include <linux/pwm.h>
 #include "intel_drv.h"
+#include <drm/i915_vgt_isol.h>
 
 #define CRC_PMIC_PWM_PERIOD_NS	21333
 
@@ -508,7 +509,7 @@ static u32 i9xx_get_backlight(struct intel_connector *connector)
 	if (panel->backlight.combination_mode) {
 		u8 lbpc;
 
-		pci_read_config_byte(dev->pdev, PCI_LBPC, &lbpc);
+		vgt_isol_pci_read_config_byte(dev->pdev, PCI_LBPC, &lbpc);
 		val *= lbpc;
 	}
 
@@ -603,7 +604,7 @@ static void i9xx_set_backlight(struct intel_connector *connector, u32 level)
 
 		lbpc = level * 0xfe / panel->backlight.max + 1;
 		level /= lbpc;
-		pci_write_config_byte(dev->pdev, PCI_LBPC, lbpc);
+		vgt_isol_pci_write_config_byte(dev->pdev, PCI_LBPC, lbpc);
 	}
 
 	if (IS_GEN4(dev)) {

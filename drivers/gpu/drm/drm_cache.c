@@ -31,7 +31,7 @@
 #include <linux/export.h>
 #include <drm/drmP.h>
 
-#if defined(CONFIG_X86)
+#if defined(CONFIG_X86) || defined(CONFIG_UML_X86)
 #include <asm/smp.h>
 
 /*
@@ -71,8 +71,8 @@ void
 drm_clflush_pages(struct page *pages[], unsigned long num_pages)
 {
 
-#if defined(CONFIG_X86)
-	if (cpu_has_clflush) {
+#if defined(CONFIG_X86) || defined(CONFIG_UML_X86)
+	if (true) {
 		drm_cache_flush_clflush(pages, num_pages);
 		return;
 	}
@@ -104,8 +104,8 @@ EXPORT_SYMBOL(drm_clflush_pages);
 void
 drm_clflush_sg(struct sg_table *st)
 {
-#if defined(CONFIG_X86)
-	if (cpu_has_clflush) {
+#if defined(CONFIG_X86) || defined(CONFIG_UML_X86)
+	if (true) {
 		struct sg_page_iter sg_iter;
 
 		mb();
@@ -125,11 +125,12 @@ drm_clflush_sg(struct sg_table *st)
 }
 EXPORT_SYMBOL(drm_clflush_sg);
 
+
 void
 drm_clflush_virt_range(void *addr, unsigned long length)
 {
-#if defined(CONFIG_X86)
-	if (cpu_has_clflush) {
+#if defined(CONFIG_X86) || defined(CONFIG_UML_X86)
+	if (true) {
 		const int size = boot_cpu_data.x86_clflush_size;
 		void *end = addr + length;
 		addr = (void *)(((unsigned long)addr) & -size);

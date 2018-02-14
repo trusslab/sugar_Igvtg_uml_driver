@@ -14,6 +14,11 @@
 #include <kern.h>
 #include <mem_user.h>
 #include <os.h>
+#include <asm/io.h>
+#include <linux/prints.h>
+#include <linux/pci.h>
+#include <linux/pci_ids.h>
+#include <linux/scatterlist.h>
 
 static int physmem_fd = -1;
 
@@ -37,6 +42,215 @@ void __init mem_total_pages(unsigned long physmem, unsigned long iomem,
 
 	max_mapnr = total_pages;
 }
+
+#define _IOMMUF_readable 0
+#define IOMMUF_readable  (1u<<_IOMMUF_readable)
+#define _IOMMUF_writable 1
+#define IOMMUF_writable  (1u<<_IOMMUF_writable)
+
+int um_map_in_iommu(void *vaddr)
+{
+	BUG();
+
+}
+
+int um_pin_memory(unsigned long start_page, unsigned long num_pages);
+int um_unpin_memory(unsigned long start_page, unsigned long num_pages);
+
+void __iomem *ioremap(phys_addr_t offset, unsigned long size)
+{
+		return (offset + 0xd0000000);
+}
+
+void iounmap(void *addr)
+{
+}
+
+int
+dma_map_sg(void *dev, struct scatterlist *sg, int nents,
+           int direction)
+{
+	int i, ents;
+	struct scatterlist *s;
+	struct page *page;
+	
+	for_each_sg(sg, s, nents, i) {
+		/*
+		 * To see where the ~0x3 comes from, take a look at the
+		 * sg_assign_page() in include/linux/scatterlist.h.
+		 */
+	        page = (dma_addr_t) sg->page_link & ~0x3; 
+	        sg->dma_address = __va(page_to_phys(page)); 
+		um_pin_memory((unsigned long) sg->dma_address >> PAGE_SHIFT,
+			      (unsigned long) sg_dma_len(sg) >> PAGE_SHIFT);
+	}
+
+	return nents; /* 0 is error */
+}
+
+void
+dma_unmap_sg(void *dev, struct scatterlist *sg, int nhwentries,
+             int direction)
+{
+	int i;
+	struct scatterlist *s;
+	struct page *page;
+	
+	for_each_sg(sg, s, nhwentries, i) {
+		/*
+		 * To see where the ~0x3 comes from, take a look at the
+		 * sg_assign_page() in include/linux/scatterlist.h.
+		 */
+	        page = (dma_addr_t) sg->page_link & ~0x3; 
+	        sg->dma_address = __va(page_to_phys(page)); 
+		um_unpin_memory((unsigned long) sg->dma_address >> PAGE_SHIFT,
+			      (unsigned long) sg_dma_len(sg) >> PAGE_SHIFT);
+	}
+}
+
+int hdmi_spd_infoframe_init(void *frame,
+                             const char *vendor, const char *product)
+{
+	return 0;
+}
+
+void dma_free_coherent(struct device *dev, size_t size,
+                    void *vaddr, dma_addr_t bus)
+{
+	BUG();
+}
+
+int hdmi_vendor_infoframe_init(void *frame)
+{
+	return 0;
+}
+
+dma_addr_t
+dma_map_page(void *dev, struct page *page, unsigned long offset,
+             size_t size, int direction)
+{
+	dma_addr_t addr = (dma_addr_t) __va(page_to_pfn(page) << PAGE_SHIFT);
+
+	if ((size != PAGE_SIZE) || offset)
+		PRINTK_ERR("Error: unexpected size or offset!\n");
+	um_pin_memory((unsigned long) addr >> PAGE_SHIFT, 1);
+	return addr;
+}
+
+void
+dma_unmap_page(void *dev, dma_addr_t dma_address, size_t size,
+               int direction)
+{
+	if (size != PAGE_SIZE)
+		PRINTK_ERR("Error: unexpected size!\n");
+
+	um_unpin_memory((unsigned long) dma_address >> PAGE_SHIFT, 1);
+}
+
+int set_pages_wb(struct page *page, int numpages)
+{
+	return 0;
+}
+
+int set_pages_uc(struct page *page, int numpages)
+{
+	return 0;
+}
+
+int hdmi_avi_infoframe_init(void *frame)
+{
+	return 0;
+}
+
+int dma_mapping_error(void *dev, dma_addr_t dma_addr)
+{
+	return 0;
+}
+
+ssize_t
+hdmi_infoframe_pack(void *frame, void *buffer, size_t size)
+{
+	return 0;
+}
+
+extern void *
+dma_alloc_coherent(void *dev, size_t size, dma_addr_t *dma_handle,
+                   gfp_t flag)
+{
+	return 0x1;
+}
+
+int fb_get_options(const char *name, char **option)
+{
+	return 0;
+}
+
+int cn_netlink_send(void *msg, u32 portid, u32 group, gfp_t gfp_mask)
+{
+	return 0;
+}
+
+int pci_bus_alloc_resource(void *bus, void *res,
+                 resource_size_t size, resource_size_t align,
+                 resource_size_t min, unsigned long type_mask,
+                 resource_size_t (*alignf)(void *,
+                                           const void *,
+                                           resource_size_t,
+                                           resource_size_t),
+                 void *alignf_data)
+{
+	return 0;
+}
+
+extern void *vgt_local_opregion_va;
+
+#define VGT_OPREGION_SIZE 0x2000 /* two pages for opregion */
+/* from drivers/gpu/drm/i915/vgt/vbios.h */
+#define VBIOS_OFFSET 0x400
+
+void __iomem *pci_map_rom(void *pdev, size_t *size)
+{
+	*size = (VGT_OPREGION_SIZE - VBIOS_OFFSET); /* two pages */ 
+	return (void __iomem *) (vgt_local_opregion_va + VBIOS_OFFSET);
+}
+
+void pci_unmap_rom(void *pdev, void __iomem *rom)
+{
+}
+
+static struct pci_dev pdev;
+/* Copied from drivers/gpu/drm/i915/i915_drv.h */
+#define INTEL_PCH_LPT_DEVICE_ID_TYPE		0x8c00
+
+struct pci_dev *pci_get_class(unsigned int class, struct pci_dev *from)
+{
+	if (from == NULL) {
+		pdev.vendor = PCI_VENDOR_ID_INTEL;
+		pdev.device = INTEL_PCH_LPT_DEVICE_ID_TYPE;
+		return &pdev;
+	} else {
+		return NULL;
+	}
+}
+
+int pci_enable_msi_block(void *dev, unsigned int nvec)
+{
+
+	((struct pci_dev *) dev)->irq = 10;
+
+	return 0;
+}
+
+void pci_disable_msi(void *dev)
+{
+}
+
+int dma_supported(struct device *dev, u64 mask)
+{
+}
+
+const char *fb_mode_option;
+EXPORT_SYMBOL_GPL(fb_mode_option);
 
 void map_memory(unsigned long virt, unsigned long phys, unsigned long len,
 		int r, int w, int x)

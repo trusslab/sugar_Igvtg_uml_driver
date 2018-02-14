@@ -57,7 +57,7 @@ vmlinux_link()
 			-T ${lds} ${KBUILD_VMLINUX_INIT}                     \
 			--start-group ${KBUILD_VMLINUX_MAIN} --end-group ${1}
 	else
-		${CC} ${CFLAGS_vmlinux} -o ${2}                              \
+		${CC} ${CFLAGS_vmlinux} -shared -o ${2}                              \
 			-Wl,-T,${lds} ${KBUILD_VMLINUX_INIT}                 \
 			-Wl,--start-group                                    \
 				 ${KBUILD_VMLINUX_MAIN}                      \

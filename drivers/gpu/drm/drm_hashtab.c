@@ -37,6 +37,7 @@
 #include <linux/hash.h>
 #include <linux/slab.h>
 #include <linux/export.h>
+#include <linux/prints.h>
 
 int drm_ht_create(struct drm_open_hash *ht, unsigned int order)
 {
@@ -47,7 +48,7 @@ int drm_ht_create(struct drm_open_hash *ht, unsigned int order)
 	if (size <= PAGE_SIZE / sizeof(*ht->table))
 		ht->table = kcalloc(size, sizeof(*ht->table), GFP_KERNEL);
 	else
-		ht->table = vzalloc(size*sizeof(*ht->table));
+		ht->table = kzalloc(size*sizeof(*ht->table), GFP_KERNEL);
 	if (!ht->table) {
 		DRM_ERROR("Out of memory for hash table\n");
 		return -ENOMEM;
@@ -198,10 +199,8 @@ EXPORT_SYMBOL(drm_ht_remove_item);
 void drm_ht_remove(struct drm_open_hash *ht)
 {
 	if (ht->table) {
-		if ((PAGE_SIZE / sizeof(*ht->table)) >> ht->order)
-			kfree(ht->table);
-		else
-			vfree(ht->table);
+
+		kfree(ht->table);
 		ht->table = NULL;
 	}
 }

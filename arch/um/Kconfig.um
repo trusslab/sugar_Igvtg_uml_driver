@@ -104,3 +104,71 @@ config PGTABLE_LEVELS
 	int
 	default 3 if 3_LEVEL_PGTABLES
 	default 2
+
+config ISOL_USER
+	bool "User space DRM isolation driver (Experimental)"
+	default y
+
+config ISOL_NOT_CORE
+	bool "User space DRM isolation driver (Experimental)"
+	default y
+
+config ISOL_OTHER_HARDWARE
+	bool "User space DRM isolation driver (Experimental)"
+	default y
+
+config ISOL_DEBUG_REMOVE
+	bool "User space DRM isolation driver (Experimental)"
+	default y
+
+config AGP
+	bool "AGP"
+	default y
+
+config AGP_INTEL
+	bool "AGP_INTEL"
+	default y
+
+config INTEL_GTT
+	bool "INTEL_GTT"
+	default y
+
+config DRM
+	bool "DRM"
+	default y
+
+config DRM_MIPI_DSI
+	bool "DRM_MIPI_DSI"
+	default y
+
+config DRM_KMS_HELPER
+	bool "DRM_KMS_HELPER"
+	default y
+
+config DRM_TDFX
+	bool "DRM_TDFX"
+	default y
+
+config DRM_I915
+	bool "DRM_I915"
+	default y
+
+config DRM_I915_PRELIMINARY_HW_SUPPORT
+	bool "DRM_I915_PRELIMINARY_HW_SUPPORT"
+	default y
+
+config DRM_I915_VGT
+	bool "DRM_I915_VGT"
+	default y
+
+config DRM_PANEL
+	bool "DRM_PANEL"
+	default y
+
+config DRM_BRIDGE
+	bool "DRM_BRIDGE"
+	default y
+
+config DMA_SHARED_BUFFER
+	bool "DMA_SHARED_BUFFER"
+	default y

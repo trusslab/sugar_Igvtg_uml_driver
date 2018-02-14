@@ -33,6 +33,12 @@
 #include "intel_drv.h"
 #include <linux/dma_remapping.h>
 #include <linux/uaccess.h>
+#include <linux/prints.h>
+
+static inline int fault_in_multipages_readable(const char __user *uaddr,
+                                               int size)
+{
+}
 
 #define  __EXEC_OBJECT_HAS_PIN (1<<31)
 #define  __EXEC_OBJECT_HAS_FENCE (1<<30)
@@ -266,6 +272,7 @@ relocate_entry_cpu(struct drm_i915_gem_object *obj,
 
 	vaddr = kmap_atomic(i915_gem_object_get_page(obj,
 				reloc->offset >> PAGE_SHIFT));
+	
 	*(uint32_t *)(vaddr + page_offset) = lower_32_bits(delta);
 
 	if (INTEL_INFO(dev)->gen >= 8) {
@@ -462,11 +469,12 @@ i915_gem_execbuffer_relocate_entry(struct drm_i915_gem_object *obj,
 	if (obj->active && pagefault_disabled())
 		return -EFAULT;
 
+
 	if (use_cpu_reloc(obj))
 		ret = relocate_entry_cpu(obj, reloc, target_offset);
 	else if (obj->map_and_fenceable)
 		ret = relocate_entry_gtt(obj, reloc, target_offset);
-	else if (cpu_has_clflush)
+	else if (true)
 		ret = relocate_entry_clflush(obj, reloc, target_offset);
 	else {
 		WARN_ONCE(1, "Impossible case in relocation handling\n");
@@ -545,6 +553,11 @@ i915_gem_execbuffer_relocate_vma_slow(struct i915_vma *vma,
 	return 0;
 }
 
+#ifdef I915_VGT_ISOL_DEBUG 
+void print_batch_buffer(struct drm_i915_gem_object *batch_obj, __u32 batch_len, bool full);
+void print_batch_buffer_full(struct drm_i915_gem_object *batch_obj, __u32 batch_len);
+#endif /* I915_VGT_ISOL_DEBUG */
+
 static int
 i915_gem_execbuffer_relocate(struct eb_vmas *eb)
 {
@@ -605,10 +618,11 @@ i915_gem_execbuffer_reserve_vma(struct i915_vma *vma,
 
 	ret = i915_gem_object_pin(obj, vma->vm, entry->alignment, flags);
 	if ((ret == -ENOSPC  || ret == -E2BIG) &&
-	    only_mappable_for_reloc(entry->flags))
+	    only_mappable_for_reloc(entry->flags)) {
 		ret = i915_gem_object_pin(obj, vma->vm,
 					  entry->alignment,
 					  flags & ~PIN_MAPPABLE);
+	}
 	if (ret)
 		return ret;
 
@@ -801,6 +815,7 @@ i915_gem_execbuffer_relocate_slow(struct drm_device *dev,
 	int *reloc_offset;
 	int i, total, ret;
 	unsigned count = args->buffer_count;
+	BUG(); /* not supported */
 
 	vm = list_first_entry(&eb->vmas, struct i915_vma, exec_list)->vm;
 
@@ -1358,6 +1373,7 @@ eb_get_batch(struct eb_vmas *eb)
 	return vma->obj;
 }
 
+
 static int
 i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 		       struct drm_file *file,
@@ -1408,9 +1424,9 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 		return -EINVAL;
 	} 
 
-	if ((args->flags & I915_EXEC_RING_MASK) == I915_EXEC_DEFAULT)
+	if ((args->flags & I915_EXEC_RING_MASK) == I915_EXEC_DEFAULT) {
 		ring = &dev_priv->ring[RCS];
-	else if ((args->flags & I915_EXEC_RING_MASK) == I915_EXEC_BSD) {
+	} else if ((args->flags & I915_EXEC_RING_MASK) == I915_EXEC_BSD) {
 		if (HAS_BSD2(dev)) {
 			int ring_id;
 
@@ -1497,12 +1513,18 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 
 	/* take note of the batch buffer before we might reorder the lists */
 	batch_obj = eb_get_batch(eb);
+#ifdef I915_VGT_ISOL_DEBUG 
+	print_batch_buffer(batch_obj, args->batch_len, false);
+#endif /* I915_VGT_ISOL_DEBUG */
 
 	/* Move the objects en-masse into the GTT, evicting if necessary. */
 	need_relocs = (args->flags & I915_EXEC_NO_RELOC) == 0;
 	ret = i915_gem_execbuffer_reserve(ring, &eb->vmas, ctx, &need_relocs);
 	if (ret)
 		goto err;
+#ifdef I915_VGT_ISOL_DEBUG 
+	print_batch_buffer(batch_obj, args->batch_len, false);
+#endif /* I915_VGT_ISOL_DEBUG */
 
 	/* The objects are in their final locations, apply the relocations. */
 	if (need_relocs)
@@ -1516,6 +1538,9 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 		if (ret)
 			goto err;
 	}
+#ifdef I915_VGT_ISOL_DEBUG 
+	print_batch_buffer(batch_obj, args->batch_len, false);
+#endif /* I915_VGT_ISOL_DEBUG */
 
 	/* Set the pending read domains for the batch buffer to COMMAND */
 	if (batch_obj->base.pending_write_domain) {
@@ -1539,6 +1564,9 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 			ret = PTR_ERR(parsed_batch_obj);
 			goto err;
 		}
+#ifdef I915_VGT_ISOL_DEBUG 
+		print_batch_buffer(batch_obj, args->batch_len, false);
+#endif /* I915_VGT_ISOL_DEBUG */
 
 		/*
 		 * parsed_batch_obj == batch_obj means batch not fully parsed:
@@ -1560,6 +1588,9 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 			batch_obj = parsed_batch_obj;
 		}
 	}
+#ifdef I915_VGT_ISOL_DEBUG 
+	print_batch_buffer(batch_obj, args->batch_len, false);
+#endif /* I915_VGT_ISOL_DEBUG */
 
 	batch_obj->base.pending_read_domains |= I915_GEM_DOMAIN_COMMAND;
 
@@ -1582,8 +1613,12 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 			goto err;
 
 		params->batch_obj_vm_offset = i915_gem_obj_ggtt_offset(batch_obj);
-	} else
+	} else {
 		params->batch_obj_vm_offset = i915_gem_obj_offset(batch_obj, vm);
+	}
+#ifdef I915_VGT_ISOL_DEBUG 
+	print_batch_buffer(batch_obj, args->batch_len, false);
+#endif /* I915_VGT_ISOL_DEBUG */
 
 	/* Allocate a request for this batch buffer nice and early. */
 	ret = i915_gem_request_alloc(ring, ctx, &params->request);
@@ -1593,6 +1628,13 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 	ret = i915_gem_request_add_to_client(params->request, file);
 	if (ret)
 		goto err_batch_unpin;
+#ifdef I915_VGT_ISOL_DEBUG 
+	print_i915_execlists(dev);
+#endif /* I915_VGT_ISOL_DEBUG */
+#ifdef I915_VGT_ISOL_DEBUG 
+	print_batch_buffer(batch_obj, args->batch_len, false);
+	print_batch_buffer_full(batch_obj, args->batch_len);
+#endif /* I915_VGT_ISOL_DEBUG */
 
 	/*
 	 * Save assorted stuff away to pass through to *_submission().
@@ -1607,7 +1649,12 @@ i915_gem_do_execbuffer(struct drm_device *dev, void *data,
 	params->batch_obj               = batch_obj;
 	params->ctx                     = ctx;
 
+
 	ret = dev_priv->gt.execbuf_submit(params, args, &eb->vmas);
+#ifdef I915_VGT_ISOL_DEBUG 
+	print_i915_execlists(dev);
+#endif /* I915_VGT_ISOL_DEBUG */
+
 
 err_batch_unpin:
 	/*
@@ -1638,6 +1685,7 @@ pre_mutex_err:
 	/* intel_gpu_busy should also get a ref, so it will free when the device
 	 * is really idle. */
 	intel_runtime_pm_put(dev_priv);
+
 	return ret;
 }
 

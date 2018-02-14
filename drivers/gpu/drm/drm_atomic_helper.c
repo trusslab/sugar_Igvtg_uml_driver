@@ -973,10 +973,7 @@ drm_atomic_helper_wait_for_vblanks(struct drm_device *dev,
 		if (!old_crtc_state->enable)
 			continue;
 
-		ret = wait_event_timeout(dev->vblank[i].queue,
-				old_crtc_state->last_vblank_count !=
-					drm_crtc_vblank_count(crtc),
-				msecs_to_jiffies(50));
+
 
 		drm_crtc_vblank_put(crtc);
 	}
@@ -1132,6 +1129,7 @@ int drm_atomic_helper_prepare_planes(struct drm_device *dev,
 			continue;
 
 		funcs = plane->helper_private;
+
 
 		if (funcs->prepare_fb) {
 			ret = funcs->prepare_fb(plane, plane_state);
@@ -1772,6 +1770,7 @@ int __drm_atomic_helper_set_config(struct drm_mode_set *set,
 
 	WARN_ON(!set->fb);
 	WARN_ON(!set->num_connectors);
+
 
 	ret = drm_atomic_set_mode_for_crtc(crtc_state, set->mode);
 	if (ret != 0)

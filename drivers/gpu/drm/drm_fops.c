@@ -40,6 +40,7 @@
 #include <linux/module.h>
 #include "drm_legacy.h"
 #include "drm_internal.h"
+#include <linux/prints.h>
 
 /* from BKL pushdown */
 DEFINE_MUTEX(drm_global_mutex);
@@ -83,8 +84,9 @@ int drm_open(struct inode *inode, struct file *filp)
 	struct drm_minor *minor;
 	int retcode;
 	int need_setup = 0;
+	unsigned int minor_id = 0;
 
-	minor = drm_minor_acquire(iminor(inode));
+	minor = drm_minor_acquire(minor_id);
 	if (IS_ERR(minor))
 		return PTR_ERR(minor);
 
@@ -93,7 +95,6 @@ int drm_open(struct inode *inode, struct file *filp)
 		need_setup = 1;
 
 	/* share address_space across all char-devs of a single device */
-	filp->f_mapping = dev->anon_inode->i_mapping;
 
 	retcode = drm_open_helper(filp, minor);
 	if (retcode)

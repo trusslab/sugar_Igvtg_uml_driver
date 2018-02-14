@@ -16,6 +16,7 @@
 #include <as-layout.h>
 #include <kern_util.h>
 #include <os.h>
+#include <linux/prints.h>
 
 /*
  * This list is accessed under irq_lock, except in sigio_handler,
@@ -328,14 +329,34 @@ static void dummy(struct irq_data *d)
 {
 }
 
+static void dummy1(struct irq_data *d)
+{
+}
+
+static void dummy2(struct irq_data *d)
+{
+}
+
+static void dummy3(struct irq_data *d)
+{
+}
+
+static void dummy4(struct irq_data *d)
+{
+}
+
+static void dummy5(struct irq_data *d)
+{
+}
+
 /* This is used for everything else than the timer. */
 static struct irq_chip normal_irq_type = {
 	.name = "SIGIO",
-	.irq_disable = dummy,
-	.irq_enable = dummy,
-	.irq_ack = dummy,
-	.irq_mask = dummy,
-	.irq_unmask = dummy,
+	.irq_disable = dummy1,
+	.irq_enable = dummy2,
+	.irq_ack = dummy3,
+	.irq_mask = dummy4,
+	.irq_unmask = dummy5,
 };
 
 static struct irq_chip SIGVTALRM_irq_type = {

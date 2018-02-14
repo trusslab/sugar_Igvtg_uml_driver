@@ -87,6 +87,7 @@
 #include <asm/setup.h>
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
+#include <linux/prints.h>
 
 static int kernel_init(void *);
 
@@ -494,6 +495,8 @@ static void __init mm_init(void)
 	ioremap_huge_init();
 }
 
+void isol_set_current(void);
+
 asmlinkage __visible void __init start_kernel(void)
 {
 	char *command_line;
@@ -558,6 +561,7 @@ asmlinkage __visible void __init start_kernel(void)
 	trap_init();
 	mm_init();
 
+#ifndef CONFIG_ISOL_USER
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
 	 * timer interrupt). Full topology setup happens at smp_init()
@@ -572,6 +576,7 @@ asmlinkage __visible void __init start_kernel(void)
 	if (WARN(!irqs_disabled(),
 		 "Interrupts were enabled *very* early, fixing it\n"))
 		local_irq_disable();
+#endif /* !CONFIG_ISOL_USER */
 	idr_init_cache();
 	rcu_init();
 
@@ -592,13 +597,15 @@ asmlinkage __visible void __init start_kernel(void)
 	time_init();
 	sched_clock_postinit();
 	perf_event_init();
-	profile_init();
 	call_function_init();
 	WARN(!irqs_disabled(), "Interrupts were enabled early\n");
 	early_boot_irqs_disabled = false;
 	local_irq_enable();
 
 	kmem_cache_init_late();
+#ifdef CONFIG_ISOL_USER
+	return;
+#endif
 
 	/*
 	 * HACK ALERT! This is early. We're enabling the console before

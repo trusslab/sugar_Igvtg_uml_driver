@@ -33,6 +33,7 @@
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 #include "dvo.h"
+#include <linux/prints.h>
 
 #define SIL164_ADDR	0x38
 #define CH7xxx_ADDR	0x76

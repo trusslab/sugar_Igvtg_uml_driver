@@ -356,6 +356,10 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	unsigned long addr;
 	int purged = 0;
 	struct vmap_area *first;
+	printk("kernel: %s [1]: size = %#x\n", __func__, (unsigned int) size);
+	printk("kernel: %s [2]: vstart = %#x\n", __func__, (unsigned int) vstart);
+	printk("kernel: %s [3]: vend = %#x\n", __func__, (unsigned int) vend);
+	dump_stack();
 
 	BUG_ON(!size);
 	BUG_ON(size & ~PAGE_MASK);
@@ -383,11 +387,17 @@ retry:
 	 * Note that __free_vmap_area may update free_vmap_cache
 	 * without updating cached_hole_size or cached_align.
 	 */
+	printk("kernel: %s [3.1]: free_vmap_cache = %#x\n", __func__, (unsigned int) free_vmap_cache);
+	printk("kernel: %s [3.2]: cached_hole_size = %#x\n", __func__, (unsigned int) cached_hole_size);
+	printk("kernel: %s [3.3]: cached_align = %#x\n", __func__, (unsigned int) cached_align);
+	printk("kernel: %s [3.4]: align = %#x\n", __func__, (unsigned int) align);
+	printk("kernel: %s [3.5]: vstart = %#x\n", __func__, (unsigned int) vstart);
 	if (!free_vmap_cache ||
 			size < cached_hole_size ||
 			vstart < cached_vstart ||
 			align < cached_align) {
 nocache:
+		printk("kernel: %s [3.6]\n", __func__);
 		cached_hole_size = 0;
 		free_vmap_cache = NULL;
 	}
@@ -399,15 +409,19 @@ nocache:
 	if (free_vmap_cache) {
 		first = rb_entry(free_vmap_cache, struct vmap_area, rb_node);
 		addr = ALIGN(first->va_end, align);
+		printk("kernel: %s [4]\n", __func__);
 		if (addr < vstart)
 			goto nocache;
 		if (addr + size < addr)
 			goto overflow;
+		printk("kernel: %s [5]\n", __func__);
 
 	} else {
 		addr = ALIGN(vstart, align);
+		printk("kernel: %s [6]\n", __func__);
 		if (addr + size < addr)
 			goto overflow;
+		printk("kernel: %s [7]\n", __func__);
 
 		n = vmap_area_root.rb_node;
 		first = NULL;
@@ -433,8 +447,10 @@ nocache:
 		if (addr + cached_hole_size < first->va_start)
 			cached_hole_size = first->va_start - addr;
 		addr = ALIGN(first->va_end, align);
+		printk("kernel: %s [8]\n", __func__);
 		if (addr + size < addr)
 			goto overflow;
+		printk("kernel: %s [9]\n", __func__);
 
 		if (list_is_last(&first->list, &vmap_area_list))
 			goto found;
@@ -444,8 +460,10 @@ nocache:
 	}
 
 found:
+	printk("kernel: %s [10]: addr = %#x\n", __func__, (unsigned int) addr);
 	if (addr + size > vend)
 		goto overflow;
+	printk("kernel: %s [11]\n", __func__);
 
 	va->va_start = addr;
 	va->va_end = addr + size;
@@ -457,6 +475,7 @@ found:
 	BUG_ON(va->va_start & (align-1));
 	BUG_ON(va->va_start < vstart);
 	BUG_ON(va->va_end > vend);
+	printk("kernel: %s [12]\n", __func__);
 
 	return va;
 
@@ -1332,7 +1351,6 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 	struct vmap_area *va;
 	struct vm_struct *area;
 
-	BUG_ON(in_interrupt());
 	if (flags & VM_IOREMAP)
 		align = 1ul << clamp_t(int, fls_long(size),
 				       PAGE_SHIFT, IOREMAP_MAX_ORDER);
@@ -1451,6 +1469,8 @@ struct vm_struct *remove_vm_area(const void *addr)
 static void __vunmap(const void *addr, int deallocate_pages)
 {
 	struct vm_struct *area;
+	 
+	return;
 
 	if (!addr)
 		return;
@@ -1505,6 +1525,7 @@ static void __vunmap(const void *addr, int deallocate_pages)
  */
 void vfree(const void *addr)
 {
+	printk("kernel: %s [1]: addr = %#x\n", __func__, (unsigned int) addr);
 	BUG_ON(in_nmi());
 
 	kmemleak_free(addr);

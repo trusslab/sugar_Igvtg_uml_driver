@@ -30,6 +30,7 @@
 
 #include <drm/drmP.h>
 #include "drm_internal.h"
+#include <linux/prints.h>
 
 /**
  * drm_getmagic - Get unique magic of a client

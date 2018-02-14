@@ -158,22 +158,10 @@ int driver_register(struct device_driver *drv)
 		printk(KERN_WARNING "Driver '%s' needs updating - please use "
 			"bus_type methods\n", drv->name);
 
-	other = driver_find(drv->name, drv->bus);
-	if (other) {
-		printk(KERN_ERR "Error: Driver '%s' is already registered, "
-			"aborting...\n", drv->name);
-		return -EBUSY;
-	}
 
 	ret = bus_add_driver(drv);
 	if (ret)
 		return ret;
-	ret = driver_add_groups(drv, drv->groups);
-	if (ret) {
-		bus_remove_driver(drv);
-		return ret;
-	}
-	kobject_uevent(&drv->p->kobj, KOBJ_ADD);
 
 	return ret;
 }

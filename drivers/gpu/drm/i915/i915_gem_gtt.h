@@ -113,6 +113,23 @@ typedef uint64_t gen8_ppgtt_pml4e_t;
 #define I915_PDPES_PER_PDP(dev) (USES_FULL_48BIT_PPGTT(dev) ?\
 				 GEN8_PML4ES_PER_PML4 : GEN8_LEGACY_PDPES)
 
+typedef unsigned long	pteval_t; /* from pgtable_64_types */
+
+#define _PAGE_BIT_PRESENT	0	/* is present */
+#define ISOL_PAGE_PRESENT	(_AT(pteval_t, 1) << _PAGE_BIT_PRESENT)
+
+#define _PAGE_BIT_RW		1	/* writeable */
+#define ISOL_PAGE_RW	(_AT(pteval_t, 1) << _PAGE_BIT_RW)
+
+#define _PAGE_BIT_PWT		3	/* page write through */
+#define _PAGE_PWT	(_AT(pteval_t, 1) << _PAGE_BIT_PWT)
+
+#define _PAGE_BIT_PCD		4	/* page cache disabled */
+#define _PAGE_PCD	(_AT(pteval_t, 1) << _PAGE_BIT_PCD)
+
+#define _PAGE_BIT_PAT		7	/* on 4KB pages */
+#define _PAGE_PAT	(_AT(pteval_t, 1) << _PAGE_BIT_PAT)
+
 #define PPAT_UNCACHED_INDEX		(_PAGE_PWT | _PAGE_PCD)
 #define PPAT_CACHED_PDE_INDEX		0 /* WB LLC */
 #define PPAT_CACHED_INDEX		_PAGE_PAT /* WB LLCeLLC */

@@ -191,10 +191,13 @@ void do_vgt_fast_display_switch(struct pgt_device *pdev)
 	ASSERT(fastpath_dpy_switch);
 	ASSERT(spin_is_locked(&pdev->lock));
 
-	if (IS_SKLPLUS(pdev))
+	if (IS_SKLPLUS(pdev)) {
+		printk("%s: [1]\n", __func__);
 		skl_do_vgt_fast_display_switch(pdev);
-	else
+	} else {
+		printk("%s: [2]\n", __func__);
 		legacy_do_vgt_fast_display_switch(pdev);
+	}
 
 	current_foreground_vm(pdev) = to_vgt;
 }

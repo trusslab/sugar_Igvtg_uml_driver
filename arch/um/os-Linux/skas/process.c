@@ -230,11 +230,6 @@ static int userspace_tramp(void *stack)
 		sa.sa_flags = SA_ONSTACK | SA_NODEFER | SA_SIGINFO;
 		sa.sa_sigaction = (void *) v;
 		sa.sa_restorer = NULL;
-		if (sigaction(SIGSEGV, &sa, NULL) < 0) {
-			printk(UM_KERN_ERR "userspace_tramp - setting SIGSEGV "
-			       "handler failed - errno = %d\n", errno);
-			exit(1);
-		}
 	}
 
 	kill(os_getpid(), SIGSTOP);

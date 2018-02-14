@@ -131,5 +131,4 @@ void os_set_pollfd(int i, int fd)
 
 void os_set_ioignore(void)
 {
-	signal(SIGIO, SIG_IGN);
 }

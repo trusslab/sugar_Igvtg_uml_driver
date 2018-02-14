@@ -13,6 +13,7 @@
 #include <asm/pgtable.h>
 #include <kern_util.h>
 #include <os.h>
+#include <linux/prints.h>
 
 pte_t *virt_to_pte(struct mm_struct *mm, unsigned long addr)
 {
@@ -133,6 +134,7 @@ static long buffer_op(unsigned long addr, int len, int is_write,
 static int copy_chunk_from_user(unsigned long from, int len, void *arg)
 {
 	unsigned long *to_ptr = arg, to = *to_ptr;
+	BUG();
 
 	memcpy((void *) to, (void *) from, len);
 	*to_ptr += len;
@@ -141,18 +143,17 @@ static int copy_chunk_from_user(unsigned long from, int len, void *arg)
 
 long __copy_from_user(void *to, const void __user *from, unsigned long n)
 {
-	if (segment_eq(get_fs(), KERNEL_DS)) {
-		memcpy(to, (__force void*)from, n);
-		return 0;
-	}
 
-	return buffer_op((unsigned long) from, n, 0, copy_chunk_from_user, &to);
+
+	memcpy(to, from, n);
+	return 0;
 }
 EXPORT_SYMBOL(__copy_from_user);
 
 static int copy_chunk_to_user(unsigned long to, int len, void *arg)
 {
 	unsigned long *from_ptr = arg, from = *from_ptr;
+	BUG();
 
 	memcpy((void *) to, (void *) from, len);
 	*from_ptr += len;
@@ -161,12 +162,9 @@ static int copy_chunk_to_user(unsigned long to, int len, void *arg)
 
 long __copy_to_user(void __user *to, const void *from, unsigned long n)
 {
-	if (segment_eq(get_fs(), KERNEL_DS)) {
-		memcpy((__force void *) to, from, n);
-		return 0;
-	}
 
-	return buffer_op((unsigned long) to, n, 1, copy_chunk_to_user, &from);
+	memcpy(to, from, n);
+	return 0;
 }
 EXPORT_SYMBOL(__copy_to_user);
 
@@ -174,6 +172,7 @@ static int strncpy_chunk_from_user(unsigned long from, int len, void *arg)
 {
 	char **to_ptr = arg, *to = *to_ptr;
 	int n;
+	BUG();
 
 	strncpy(to, (void *) from, len);
 	n = strnlen(to, len);
@@ -188,6 +187,7 @@ long __strncpy_from_user(char *dst, const char __user *src, long count)
 {
 	long n;
 	char *ptr = dst;
+	BUG();
 
 	if (segment_eq(get_fs(), KERNEL_DS)) {
 		strncpy(dst, (__force void *) src, count);
@@ -204,12 +204,14 @@ EXPORT_SYMBOL(__strncpy_from_user);
 
 static int clear_chunk(unsigned long addr, int len, void *unused)
 {
+	BUG();
 	memset((void *) addr, 0, len);
 	return 0;
 }
 
 unsigned long __clear_user(void __user *mem, unsigned long len)
 {
+	BUG();
 	if (segment_eq(get_fs(), KERNEL_DS)) {
 		memset((__force void*)mem, 0, len);
 		return 0;
@@ -222,6 +224,7 @@ EXPORT_SYMBOL(__clear_user);
 static int strnlen_chunk(unsigned long str, int len, void *arg)
 {
 	int *len_ptr = arg, n;
+	BUG();
 
 	n = strnlen((void *) str, len);
 	*len_ptr += n;
@@ -234,6 +237,7 @@ static int strnlen_chunk(unsigned long str, int len, void *arg)
 long __strnlen_user(const void __user *str, long len)
 {
 	int count = 0, n;
+	BUG();
 
 	if (segment_eq(get_fs(), KERNEL_DS))
 		return strnlen((__force char*)str, len) + 1;

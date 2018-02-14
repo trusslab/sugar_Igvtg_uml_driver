@@ -37,6 +37,7 @@
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
 #include "intel_sdvo_regs.h"
+#include <linux/prints.h>
 
 #define SDVO_TMDS_MASK (SDVO_OUTPUT_TMDS0 | SDVO_OUTPUT_TMDS1)
 #define SDVO_RGB_MASK  (SDVO_OUTPUT_RGB0 | SDVO_OUTPUT_RGB1)

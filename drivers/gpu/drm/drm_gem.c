@@ -40,6 +40,8 @@
 #include <drm/drm_vma_manager.h>
 #include <drm/drm_gem.h>
 #include "drm_internal.h"
+#include <drm/i915_vgt_isol.h>
+#include <linux/prints.h>
 
 /** @file drm_gem.c
  *
@@ -137,7 +139,7 @@ int drm_gem_object_init(struct drm_device *dev,
 
 	drm_gem_private_object_init(dev, obj, size);
 
-	filp = shmem_file_setup("drm mm object", size, VM_NORESERVE);
+	filp = vgt_isol_shmem_file_setup("drm mm object", size, VM_NORESERVE);
 	if (IS_ERR(filp))
 		return PTR_ERR(filp);
 
@@ -274,7 +276,6 @@ drm_gem_handle_delete(struct drm_file *filp, u32 handle)
 	dev = obj->dev;
 
 	/* Release reference and decrement refcount. */
-	idr_remove(&filp->object_idr, handle);
 	spin_unlock(&filp->table_lock);
 
 	if (drm_core_check_feature(dev, DRIVER_PRIME))
@@ -486,11 +487,12 @@ struct page **drm_gem_get_pages(struct drm_gem_object *obj)
 		return ERR_PTR(-ENOMEM);
 
 	for (i = 0; i < npages; i++) {
-		p = shmem_read_mapping_page(mapping, i);
+		p = vgt_isol_shmem_read_mapping_page(mapping, i);
 		if (IS_ERR(p))
 			goto fail;
 		pages[i] = p;
 
+		BUG();
 		/* Make sure shmem keeps __GFP_DMA32 allocated pages in the
 		 * correct region during swapin. Note that this requires
 		 * __GFP_DMA32 to be set in mapping_gfp_mask(inode->i_mapping)

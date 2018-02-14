@@ -28,6 +28,7 @@
 #include <drm/i915_drm.h>
 #include "intel_drv.h"
 #include "i915_reg.h"
+#include <drm/i915_vgt_isol.h>
 
 static void i915_save_display(struct drm_device *dev)
 {
@@ -111,7 +112,7 @@ int i915_save_state(struct drm_device *dev)
 	i915_save_display(dev);
 
 	if (IS_GEN4(dev))
-		pci_read_config_word(dev->pdev, GCDGMBUS,
+		vgt_isol_pci_read_config_word(dev->pdev, GCDGMBUS,
 				     &dev_priv->regfile.saveGCDGMBUS);
 
 	/* Cache mode state */
@@ -156,7 +157,7 @@ int i915_restore_state(struct drm_device *dev)
 	i915_gem_restore_fences(dev);
 
 	if (IS_GEN4(dev))
-		pci_write_config_word(dev->pdev, GCDGMBUS,
+		vgt_isol_pci_write_config_word(dev->pdev, GCDGMBUS,
 				      dev_priv->regfile.saveGCDGMBUS);
 	i915_restore_display(dev);
 

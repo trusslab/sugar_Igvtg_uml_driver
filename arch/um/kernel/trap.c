@@ -16,6 +16,7 @@
 #include <kern_util.h>
 #include <os.h>
 #include <skas.h>
+#include <linux/prints.h>
 
 /*
  * Note this is constrained to return 0, -EFAULT, -EACCESS, -ENOMEM by
@@ -218,6 +219,8 @@ unsigned long segv(struct faultinfo fi, unsigned long ip, int is_user,
 	}
 	else if (current->mm == NULL) {
 		show_regs(container_of(regs, struct pt_regs, regs));
+		printk("Kernel mode fault at addr 0x%lx, ip 0x%lx",
+		      address, ip);
 		panic("Segfault with no mm");
 	}
 	else if (!is_user && address < TASK_SIZE) {

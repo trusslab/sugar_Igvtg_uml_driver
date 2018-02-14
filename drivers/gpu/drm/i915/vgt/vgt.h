@@ -1270,11 +1270,12 @@ static inline unsigned long __REG_READ(struct pgt_device *pdev,
 #define vgt_cap(vgt) ((vgt)->sched_info.cap)
 
 
+  
+#include <os.h>
+
 #define vgt_get_cycles() ({		\
 	cycles_t __ret;				\
-	rdtsc_ordered();			\
-	__ret = get_cycles();		\
-	rdtsc_ordered();			\
+	__ret = os_nsecs();			\
 	__ret;						\
 	})
 

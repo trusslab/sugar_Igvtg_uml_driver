@@ -99,16 +99,12 @@ static inline void __attribute__ ((noreturn)) uml_abort(void)
  */
 void os_fix_helper_signals(void)
 {
-	signal(SIGWINCH, SIG_IGN);
-	signal(SIGINT, SIG_DFL);
-	signal(SIGTERM, SIG_DFL);
 }
 
 void os_dump_core(void)
 {
 	int pid;
 
-	signal(SIGSEGV, SIG_DFL);
 
 	/*
 	 * We are about to SIGTERM this entire process group to ensure that
@@ -117,7 +113,6 @@ void os_dump_core(void)
 	 * ignore it here.
 	 */
 
-	signal(SIGTERM, SIG_IGN);
 	kill(0, SIGTERM);
 	/*
 	 * Most of the other processes associated with this UML are

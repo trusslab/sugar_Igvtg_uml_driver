@@ -137,6 +137,7 @@
 #include "i915_drv.h"
 #include "i915_vgpu.h"
 #include "intel_mocs.h"
+#include <linux/prints.h>
 
 #define GEN9_LR_CONTEXT_RENDER_SIZE (22 * PAGE_SIZE)
 #define GEN8_LR_CONTEXT_RENDER_SIZE (20 * PAGE_SIZE)
@@ -402,8 +403,9 @@ static void execlists_submit_requests(struct drm_i915_gem_request *rq0,
 {
 	execlists_update_context(rq0);
 
-	if (rq1)
+	if (rq1) {
 		execlists_update_context(rq1);
+	}
 
 	execlists_elsp_write(rq0, rq1);
 }
@@ -747,10 +749,11 @@ intel_logical_ring_advance_and_submit(struct drm_i915_gem_request *request)
 	if (intel_ring_stopped(request->ring))
 		return 0;
 
-	if (dev_priv->guc.execbuf_client)
+	if (dev_priv->guc.execbuf_client) {
 		i915_guc_submit(dev_priv->guc.execbuf_client, request);
-	else
+	} else {
 		execlists_context_queue(request);
+	}
 
 	return 0;
 }
@@ -865,6 +868,49 @@ int intel_logical_ring_reserve_space(struct drm_i915_gem_request *request)
 	return intel_logical_ring_begin(request, 0);
 }
 
+#ifdef I915_VGT_ISOL_DEBUG
+void print_batch_buffer(struct drm_i915_gem_object *batch_obj, __u32 batch_len, bool full)
+{
+	u32 *vaddr;
+	int i;
+	struct i915_vma *vma;
+
+	if (batch_len > PAGE_SIZE) {
+		PRINTK_ERR("Error: printing large batch buffers not supported\n");
+		return;
+	}
+
+	vaddr = vgt_isol_shmem_kmap_page(&batch_obj->base, 0);
+
+	if (!full) {
+		i = 0x480;
+		return;
+	}
+
+	vaddr = vgt_isol_shmem_kmap_page(&batch_obj->base, 7);
+	i = 0xec0;
+
+	list_for_each_entry(vma, &batch_obj->vma_list, exec_list) {
+		if (vma) {
+		}
+	}
+}
+
+void print_batch_buffer_full(struct drm_i915_gem_object *batch_obj, __u32 batch_len)
+{
+	u32 *vaddr;
+	int i;
+	struct i915_vma *vma;
+
+	vaddr = vgt_isol_shmem_kmap_page(&batch_obj->base, 0);
+
+}
+#endif /* I915_VGT_ISOL_DEBUG */
+
+void wait_for_interrupt_finish(void);
+extern unsigned long signal_counter;
+extern int g_flip_mode;
+
 /**
  * execlists_submission() - submit a batchbuffer for execution, Execlists style
  * @dev: DRM device.
@@ -894,6 +940,7 @@ int intel_execlists_submission(struct i915_execbuffer_params *params,
 	int instp_mode;
 	u32 instp_mask;
 	int ret;
+	unsigned long local_signal_counter;
 
 	instp_mode = args->flags & I915_EXEC_CONSTANTS_MASK;
 	instp_mask = I915_EXEC_CONSTANTS_MASK;
@@ -948,6 +995,8 @@ int intel_execlists_submission(struct i915_execbuffer_params *params,
 	exec_start = params->batch_obj_vm_offset +
 		     args->batch_start_offset;
 
+	local_signal_counter = signal_counter;
+
 	ret = ring->emit_bb_start(params->request, exec_start, params->dispatch_flags);
 	if (ret)
 		return ret;
@@ -956,6 +1005,17 @@ int intel_execlists_submission(struct i915_execbuffer_params *params,
 
 	i915_gem_execbuffer_move_to_active(vmas, params->request);
 	i915_gem_execbuffer_retire_commands(params);
+	 
+#ifdef I915_VGT_ISOL_TWO_GPU
+	while ((g_flip_mode == 0) && (signal_counter == local_signal_counter)) {
+#else /* I915_VGT_ISOL_TWO_GPU */
+	int counter = 0;
+	while ((g_flip_mode == 0) && (signal_counter <= (local_signal_counter + 1)) && counter <= 30) {
+		counter++;
+#endif /* I915_VGT_ISOL_TWO_GPU */
+		wait_for_interrupt_finish();
+	}
+
 
 	return 0;
 }
@@ -1614,6 +1674,10 @@ static int gen8_emit_bb_start(struct drm_i915_gem_request *req,
 	struct intel_ringbuffer *ringbuf = req->ringbuf;
 	bool ppgtt = !(dispatch_flags & I915_DISPATCH_SECURE);
 	int ret;
+	struct drm_i915_gem_object *ctx_obj = req->ctx->engine[req->ring->id].state;
+	uint64_t lrca = i915_gem_obj_ggtt_offset(ctx_obj) +
+			LRC_PPHWSP_PN * PAGE_SIZE;
+	lrca = lrca >> 12;
 
 	/* Don't rely in hw updating PDPs, specially in lite-restore.
 	 * Ideally, we should set Force PD Restore in ctx descriptor,
@@ -1632,6 +1696,7 @@ static int gen8_emit_bb_start(struct drm_i915_gem_request *req,
 
 		req->ctx->ppgtt->pd_dirty_rings &= ~intel_ring_flag(req->ring);
 	}
+
 
 	ret = intel_logical_ring_begin(req, 4);
 	if (ret)
@@ -1911,7 +1976,6 @@ static int intel_lr_context_render_state_init(struct drm_i915_gem_request *req)
 	i915_vma_move_to_active(i915_gem_obj_to_ggtt(so.obj), req);
 
 out:
-	i915_gem_render_state_fini(&so);
 	return ret;
 }
 
@@ -2432,7 +2496,6 @@ populate_lr_context(struct intel_context *ctx, struct drm_i915_gem_object *ctx_o
 	kunmap_atomic(reg_state);
 
 	ctx_obj->dirty = 1;
-	set_page_dirty(page);
 	i915_gem_object_unpin_pages(ctx_obj);
 
 	return 0;
@@ -2509,7 +2572,8 @@ static void lrc_setup_hardware_status_page(struct intel_engine_cs *ring,
 	ring->status_page.gfx_addr = i915_gem_obj_ggtt_offset(default_ctx_obj)
 			+ LRC_PPHWSP_PN * PAGE_SIZE;
 	page = i915_gem_object_get_page(default_ctx_obj, LRC_PPHWSP_PN);
-	ring->status_page.page_addr = kmap(page);
+	
+	ring->status_page.page_addr = ioremap(ring->status_page.gfx_addr, PAGE_SIZE);
 	ring->status_page.obj = default_ctx_obj;
 
 	I915_WRITE(RING_HWS_PGA(ring->mmio_base),
@@ -2601,6 +2665,7 @@ int intel_lr_context_deferred_alloc(struct intel_context *ctx,
 		}
 		i915_add_request_no_flush(req);
 	}
+
 	return 0;
 
 error_ringbuf:

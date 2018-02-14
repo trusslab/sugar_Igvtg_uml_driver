@@ -14,6 +14,11 @@
 #include <os.h>
 #include <sysdep/mcontext.h>
 #include "internal.h"
+#include <stdio.h>
+#include "../isol_prints.h"
+
+void vgt_signal_handler(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs);
+void vgt_terminate(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs);
 
 void (*sig_info[NSIG])(int, struct siginfo *, struct uml_pt_regs *) = {
 	[SIGTRAP]	= relay_signal,
@@ -23,6 +28,9 @@ void (*sig_info[NSIG])(int, struct siginfo *, struct uml_pt_regs *) = {
 	[SIGBUS]	= bus_handler,
 	[SIGSEGV]	= segv_handler,
 	[SIGIO]		= sigio_handler,
+	[SIGUSR1]	= vgt_signal_handler,
+	[SIGINT]	= vgt_terminate,
+	[SIGTERM]	= vgt_terminate,
 	[SIGVTALRM]	= timer_handler };
 
 static void sig_handler_common(int sig, struct siginfo *si, mcontext_t *mc)
@@ -38,7 +46,7 @@ static void sig_handler_common(int sig, struct siginfo *si, mcontext_t *mc)
 	}
 
 	/* enable signals if sig isn't IRQ signal */
-	if ((sig != SIGIO) && (sig != SIGWINCH) && (sig != SIGVTALRM))
+	if ((sig != SIGIO) && (sig != SIGWINCH) && (sig != SIGVTALRM) && (sig != SIGUSR1))
 		unblock_signals();
 
 	(*sig_info[sig])(sig, si, &r);
@@ -58,6 +66,9 @@ static void sig_handler_common(int sig, struct siginfo *si, mcontext_t *mc)
 #define SIGVTALRM_BIT 1
 #define SIGVTALRM_MASK (1 << SIGVTALRM_BIT)
 
+#define SIGUSR1_BIT 2
+#define SIGUSR1_MASK (1 << SIGUSR1_BIT)
+
 static int signals_enabled;
 static unsigned int signals_pending;
 
@@ -68,6 +79,10 @@ void sig_handler(int sig, struct siginfo *si, mcontext_t *mc)
 	enabled = signals_enabled;
 	if (!enabled && (sig == SIGIO)) {
 		signals_pending |= SIGIO_MASK;
+		return;
+	}
+	if (!enabled && (sig == SIGUSR1)) {
+		signals_pending |= SIGUSR1_MASK;
 		return;
 	}
 
@@ -130,6 +145,9 @@ static void (*handlers[_NSIG])(int sig, struct siginfo *si, mcontext_t *mc) = {
 	[SIGTRAP] = sig_handler,
 
 	[SIGIO] = sig_handler,
+	[SIGUSR1] = sig_handler,
+	[SIGINT] = sig_handler,
+	[SIGTERM] = sig_handler,
 	[SIGWINCH] = sig_handler,
 	[SIGVTALRM] = alarm_handler
 };
@@ -154,9 +172,6 @@ static void hard_handler(int sig, siginfo_t *si, void *p)
 		 * have to return, and the upper handler will deal
 		 * with this interrupt.
 		 */
-		bail = to_irq_stack(&pending);
-		if (bail)
-			return;
 
 		nested = pending & 1;
 		pending &= ~1;
@@ -173,8 +188,6 @@ static void hard_handler(int sig, siginfo_t *si, void *p)
 		 * is non-zero, we just go back, set up the stack
 		 * again, and handle the new interrupts.
 		 */
-		if (!nested)
-			pending = from_irq_stack(nested);
 	} while (pending);
 }
 
@@ -191,8 +204,9 @@ void set_handler(int sig)
 	sigaddset(&action.sa_mask, SIGVTALRM);
 	sigaddset(&action.sa_mask, SIGIO);
 	sigaddset(&action.sa_mask, SIGWINCH);
+	sigaddset(&action.sa_mask, SIGUSR1);
 
-	if (sig == SIGSEGV)
+	if (sig == SIGSEGV || sig == SIGINT || sig == SIGTERM)
 		flags |= SA_NODEFER;
 
 	if (sigismember(&action.sa_mask, sig))
@@ -282,6 +296,9 @@ void unblock_signals(void)
 		 */
 		if (save_pending & SIGIO_MASK)
 			sig_handler_common(SIGIO, NULL, NULL);
+
+		if (save_pending & SIGUSR1_MASK)
+			sig_handler_common(SIGUSR1, NULL, NULL);
 
 		if (save_pending & SIGVTALRM_MASK)
 			real_alarm_handler(NULL);

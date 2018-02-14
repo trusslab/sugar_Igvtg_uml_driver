@@ -39,6 +39,7 @@ static struct sg_table *i915_gem_map_dma_buf(struct dma_buf_attachment *attachme
 	struct sg_table *st;
 	struct scatterlist *src, *dst;
 	int ret, i;
+	BUG(); 
 
 	ret = i915_mutex_lock_interruptible(obj->base.dev);
 	if (ret)
@@ -244,7 +245,7 @@ struct dma_buf *i915_gem_prime_export(struct drm_device *dev,
 			return ERR_PTR(ret);
 	}
 
-	return dma_buf_export(&exp_info);
+	return vgt_isol_dma_buf_export(&exp_info);
 }
 
 static int i915_gem_object_get_pages_dmabuf(struct drm_i915_gem_object *obj)

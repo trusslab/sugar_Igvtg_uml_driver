@@ -24,6 +24,8 @@
 #ifndef _INTEL_LRC_H_
 #define _INTEL_LRC_H_
 
+#include <linux/prints.h>
+
 #define GEN8_LR_CONTEXT_ALIGN 4096
 #define GEN8_CSB_ENTRIES 6
 #define GEN8_CSB_PTR_MASK 0x07

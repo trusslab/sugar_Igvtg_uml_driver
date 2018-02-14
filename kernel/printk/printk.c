@@ -54,6 +54,9 @@
 
 #include "console_cmdline.h"
 #include "braille.h"
+#ifdef CONFIG_ISOL_USER
+#include <asm/io.h>
+#endif
 
 int console_printk[4] = {
 	CONSOLE_LOGLEVEL_DEFAULT,	/* console_loglevel */
@@ -1737,6 +1740,10 @@ asmlinkage int vprintk_emit(int facility, int level,
 	 * prefix which might be passed-in as a parameter.
 	 */
 	text_len = vscnprintf(text, sizeof(textbuf), fmt, args);
+
+#ifdef CONFIG_ISOL_USER
+	um_printf(text);
+#endif
 
 	/* mark and strip a trailing newline */
 	if (text_len && text[text_len-1] == '\n') {

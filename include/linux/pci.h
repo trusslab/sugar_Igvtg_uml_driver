@@ -1414,9 +1414,7 @@ static inline struct pci_dev *pci_get_subsys(unsigned int vendor,
 					     struct pci_dev *from)
 { return NULL; }
 
-static inline struct pci_dev *pci_get_class(unsigned int class,
-					    struct pci_dev *from)
-{ return NULL; }
+struct pci_dev *pci_get_class(unsigned int class, struct pci_dev *from);
 
 #define pci_dev_present(ids)	(0)
 #define no_pci_devices()	(1)

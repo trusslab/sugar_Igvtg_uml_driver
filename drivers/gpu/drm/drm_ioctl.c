@@ -36,6 +36,7 @@
 
 #include <linux/pci.h>
 #include <linux/export.h>
+#include <linux/prints.h>
 
 static int drm_version(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv);
@@ -581,7 +582,7 @@ static const struct drm_ioctl_desc drm_ioctls[] = {
 
 	DRM_IOCTL_DEF(DRM_IOCTL_ADD_CTX, drm_legacy_addctx, DRM_AUTH|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF(DRM_IOCTL_RM_CTX, drm_legacy_rmctx, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
-	DRM_IOCTL_DEF(DRM_IOCTL_MOD_CTX, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
+	DRM_IOCTL_DEF(DRM_IOCTL_MOD_CTX, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY), 
 	DRM_IOCTL_DEF(DRM_IOCTL_GET_CTX, drm_legacy_getctx, DRM_AUTH),
 	DRM_IOCTL_DEF(DRM_IOCTL_SWITCH_CTX, drm_legacy_switchctx, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF(DRM_IOCTL_NEW_CTX, drm_legacy_newctx, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
@@ -762,9 +763,9 @@ long drm_ioctl(struct file *filp,
 	/* Enforce sane locking for kms driver ioctls. Core ioctls are
 	 * too messy still. */
 	if ((drm_core_check_feature(dev, DRIVER_MODESET) && is_driver_ioctl) ||
-	    (ioctl->flags & DRM_UNLOCKED))
+	    (ioctl->flags & DRM_UNLOCKED)) {
 		retcode = func(dev, kdata, file_priv);
-	else {
+	} else {
 		mutex_lock(&drm_global_mutex);
 		retcode = func(dev, kdata, file_priv);
 		mutex_unlock(&drm_global_mutex);

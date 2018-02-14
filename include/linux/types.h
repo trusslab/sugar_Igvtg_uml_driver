@@ -151,7 +151,7 @@ typedef unsigned long blkcnt_t;
 #ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 typedef u64 dma_addr_t;
 #else
-typedef u32 dma_addr_t;
+typedef u64 dma_addr_t;
 #endif
 
 typedef unsigned __bitwise__ gfp_t;

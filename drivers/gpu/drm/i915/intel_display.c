@@ -45,6 +45,7 @@
 #include <drm/drm_rect.h>
 #include <linux/dma_remapping.h>
 #include "i915_vgpu.h"
+#include <drm/i915_vgt_isol.h>
 
 /* Primary plane formats for gen <= 3 */
 static const uint32_t i8xx_primary_formats[] = {
@@ -3949,7 +3950,8 @@ static void page_flip_completed(struct intel_crtc *intel_crtc)
 	drm_crtc_vblank_put(&intel_crtc->base);
 
 	wake_up_all(&dev_priv->pending_flip_queue);
-	queue_work(dev_priv->wq, &work->work);
+
+	work->work.func(&work->work);
 
 	trace_i915_flip_complete(intel_crtc->plane,
 				 work->pending_flip_obj);
@@ -5292,22 +5294,26 @@ static void modeset_update_crtc_power_domains(struct drm_atomic_state *state)
 	int i;
 
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
-		if (needs_modeset(crtc->state))
+		if (needs_modeset(crtc->state)) {
 			put_domains[to_intel_crtc(crtc)->pipe] =
 				modeset_get_crtc_power_domains(crtc);
+		}
 	}
 
 	if (dev_priv->display.modeset_commit_cdclk) {
 		unsigned int cdclk = to_intel_atomic_state(state)->cdclk;
 
 		if (cdclk != dev_priv->cdclk_freq &&
-		    !WARN_ON(!state->allow_modeset))
+		    !WARN_ON(!state->allow_modeset)) {
 			dev_priv->display.modeset_commit_cdclk(state);
+		}
 	}
 
-	for (i = 0; i < I915_MAX_PIPES; i++)
-		if (put_domains[i])
+	for (i = 0; i < I915_MAX_PIPES; i++) {
+		if (put_domains[i]) {
 			modeset_put_power_domains(dev_priv, put_domains[i]);
+		}
+	}
 }
 
 static int intel_compute_max_dotclk(struct drm_i915_private *dev_priv)
@@ -6803,7 +6809,7 @@ static int pnv_get_display_clock_speed(struct drm_device *dev)
 {
 	u16 gcfgc = 0;
 
-	pci_read_config_word(dev->pdev, GCFGC, &gcfgc);
+	vgt_isol_pci_read_config_word(dev->pdev, GCFGC, &gcfgc);
 
 	switch (gcfgc & GC_DISPLAY_CLOCK_MASK) {
 	case GC_DISPLAY_CLOCK_267_MHZ_PNV:
@@ -6827,7 +6833,7 @@ static int i915gm_get_display_clock_speed(struct drm_device *dev)
 {
 	u16 gcfgc = 0;
 
-	pci_read_config_word(dev->pdev, GCFGC, &gcfgc);
+	vgt_isol_pci_read_config_word(dev->pdev, GCFGC, &gcfgc);
 
 	if (gcfgc & GC_LOW_FREQUENCY_ENABLE)
 		return 133333;
@@ -6963,7 +6969,7 @@ static int gm45_get_display_clock_speed(struct drm_device *dev)
 	unsigned int cdclk_sel, vco = intel_hpll_vco(dev);
 	uint16_t tmp = 0;
 
-	pci_read_config_word(dev->pdev, GCFGC, &tmp);
+	vgt_isol_pci_read_config_word(dev->pdev, GCFGC, &tmp);
 
 	cdclk_sel = (tmp >> 12) & 0x1;
 
@@ -6989,7 +6995,7 @@ static int i965gm_get_display_clock_speed(struct drm_device *dev)
 	unsigned int cdclk_sel, vco = intel_hpll_vco(dev);
 	uint16_t tmp = 0;
 
-	pci_read_config_word(dev->pdev, GCFGC, &tmp);
+	vgt_isol_pci_read_config_word(dev->pdev, GCFGC, &tmp);
 
 	cdclk_sel = ((tmp >> 8) & 0x1f) - 1;
 
@@ -7027,7 +7033,7 @@ static int g33_get_display_clock_speed(struct drm_device *dev)
 	unsigned int cdclk_sel, vco = intel_hpll_vco(dev);
 	uint16_t tmp = 0;
 
-	pci_read_config_word(dev->pdev, GCFGC, &tmp);
+	vgt_isol_pci_read_config_word(dev->pdev, GCFGC, &tmp);
 
 	cdclk_sel = (tmp >> 4) & 0x7;
 
@@ -10740,13 +10746,9 @@ static void intel_unpin_work_fn(struct work_struct *__work)
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_plane *primary = crtc->base.primary;
 
-	mutex_lock(&dev->struct_mutex);
 	intel_unpin_fb_obj(work->old_fb, primary->state);
 	drm_gem_object_unreference(&work->pending_flip_obj->base);
 
-	if (work->flip_queued_req)
-		i915_gem_request_assign(&work->flip_queued_req, NULL);
-	mutex_unlock(&dev->struct_mutex);
 
 	intel_frontbuffer_flip_complete(dev, to_intel_plane(primary)->frontbuffer_bit);
 	drm_framebuffer_unreference(work->old_fb);
@@ -11287,8 +11289,8 @@ static int intel_queue_mmio_flip(struct drm_device *dev,
 	mmio_flip->crtc = to_intel_crtc(crtc);
 	mmio_flip->rotation = crtc->primary->state->rotation;
 
-	INIT_WORK(&mmio_flip->work, intel_mmio_flip_work_func);
-	schedule_work(&mmio_flip->work);
+
+	intel_mmio_flip_work_func(&mmio_flip->work);
 
 	return 0;
 }
@@ -11352,7 +11354,6 @@ void intel_check_page_flip(struct drm_device *dev, int pipe)
 	struct intel_crtc *intel_crtc = to_intel_crtc(crtc);
 	struct intel_unpin_work *work;
 
-	WARN_ON(!in_interrupt());
 
 	if (crtc == NULL)
 		return;
@@ -11447,8 +11448,6 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 	intel_crtc->unpin_work = work;
 	spin_unlock_irq(&dev->event_lock);
 
-	if (atomic_read(&intel_crtc->unpin_work_count) >= 2)
-		flush_workqueue(dev_priv->wq);
 
 	/* Reference the objects for the scheduled work. */
 	drm_framebuffer_reference(work->old_fb);
@@ -11506,8 +11505,6 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 		if (ret)
 			goto cleanup_unpin;
 
-		i915_gem_request_assign(&work->flip_queued_req,
-					obj->last_write_req);
 	} else {
 		if (!request) {
 			ret = i915_gem_request_alloc(ring, ring->default_context, &request);
@@ -11538,7 +11535,16 @@ static int intel_crtc_page_flip(struct drm_crtc *crtc,
 				       to_intel_plane(primary)->frontbuffer_bit);
 
 	trace_i915_flip_request(intel_crtc->plane, obj);
-
+#ifdef I915_VGT_ISOL_DEBUG 
+	print_i915_execlists(dev);
+#endif /* I915_VGT_ISOL_DEBUG */
+	/* Taken from i915_gem_retire_work_handler().
+	 * See is done in the normal driver in a workqueue task scheduled in __i915_add_request()
+	 */
+	if (mutex_trylock(&dev_priv->dev->struct_mutex)) {
+		i915_gem_retire_requests(dev_priv->dev);
+		mutex_unlock(&dev_priv->dev->struct_mutex);
+	}
 	return 0;
 
 cleanup_unpin:
@@ -15619,7 +15625,7 @@ int intel_modeset_vga_set_state(struct drm_device *dev, bool state)
 	unsigned reg = INTEL_INFO(dev)->gen >= 6 ? SNB_GMCH_CTRL : INTEL_GMCH_CTRL;
 	u16 gmch_ctrl;
 
-	if (pci_read_config_word(dev_priv->bridge_dev, reg, &gmch_ctrl)) {
+	if (vgt_isol_pci_read_config_word(dev_priv->bridge_dev, reg, &gmch_ctrl)) {
 		DRM_ERROR("failed to read control word\n");
 		return -EIO;
 	}
@@ -15632,7 +15638,7 @@ int intel_modeset_vga_set_state(struct drm_device *dev, bool state)
 	else
 		gmch_ctrl |= INTEL_GMCH_VGA_DISABLE;
 
-	if (pci_write_config_word(dev_priv->bridge_dev, reg, gmch_ctrl)) {
+	if (vgt_isol_pci_write_config_word(dev_priv->bridge_dev, reg, gmch_ctrl)) {
 		DRM_ERROR("failed to write control word\n");
 		return -EIO;
 	}

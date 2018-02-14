@@ -66,7 +66,6 @@ static inline void __down_read(struct rw_semaphore *sem)
 		     LOCK_PREFIX _ASM_INC "(%1)\n\t"
 		     /* adds 0x00000001 */
 		     "  jns        1f\n"
-		     "  call call_rwsem_down_read_failed\n"
 		     "1:\n\t"
 		     "# ending down_read\n\t"
 		     : "+m" (sem->count)
@@ -108,7 +107,6 @@ static inline void __down_write_nested(struct rw_semaphore *sem, int subclass)
 		     "  test " __ASM_SEL(%w1,%k1) "," __ASM_SEL(%w1,%k1) "\n\t"
 		     /* was the active mask 0 before? */
 		     "  jz        1f\n"
-		     "  call call_rwsem_down_write_failed\n"
 		     "1:\n"
 		     "# ending down_write"
 		     : "+m" (sem->count), "=d" (tmp)
@@ -157,7 +155,6 @@ static inline void __up_read(struct rw_semaphore *sem)
 		     LOCK_PREFIX "  xadd      %1,(%2)\n\t"
 		     /* subtracts 1, returns the old value */
 		     "  jns        1f\n\t"
-		     "  call call_rwsem_wake\n" /* expects old value in %edx */
 		     "1:\n"
 		     "# ending __up_read\n"
 		     : "+m" (sem->count), "=d" (tmp)
@@ -175,7 +172,6 @@ static inline void __up_write(struct rw_semaphore *sem)
 		     LOCK_PREFIX "  xadd      %1,(%2)\n\t"
 		     /* subtracts 0xffff0001, returns the old value */
 		     "  jns        1f\n\t"
-		     "  call call_rwsem_wake\n" /* expects old value in %edx */
 		     "1:\n\t"
 		     "# ending __up_write\n"
 		     : "+m" (sem->count), "=d" (tmp)
@@ -195,7 +191,6 @@ static inline void __downgrade_write(struct rw_semaphore *sem)
 		      *     0xZZZZZZZZ00000001 -> 0xYYYYYYYY00000001 (x86_64)
 		      */
 		     "  jns       1f\n\t"
-		     "  call call_rwsem_downgrade_wake\n"
 		     "1:\n\t"
 		     "# ending __downgrade_write\n"
 		     : "+m" (sem->count)

@@ -38,6 +38,7 @@
 #include "intel_drv.h"
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
+#include <linux/prints.h>
 
 static bool
 format_is_yuv(uint32_t format)
@@ -128,7 +129,6 @@ void intel_pipe_update_start(struct intel_crtc *crtc)
 
 		local_irq_enable();
 
-		timeout = schedule_timeout(timeout);
 
 		local_irq_disable();
 	}

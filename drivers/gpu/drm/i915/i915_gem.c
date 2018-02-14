@@ -37,6 +37,7 @@
 #include <linux/swap.h>
 #include <linux/pci.h>
 #include <linux/dma-buf.h>
+#include <drm/i915_vgt_isol.h>
 
 #define RQ_BUG_ON(expr)
 
@@ -174,6 +175,7 @@ i915_gem_object_get_pages_phys(struct drm_i915_gem_object *obj)
 	struct sg_table *st;
 	struct scatterlist *sg;
 	int i;
+	BUG(); 
 
 	if (WARN_ON(i915_gem_object_needs_bit17_swizzle(obj)))
 		return -EINVAL;
@@ -182,7 +184,7 @@ i915_gem_object_get_pages_phys(struct drm_i915_gem_object *obj)
 		struct page *page;
 		char *src;
 
-		page = shmem_read_mapping_page(mapping, i);
+		page = vgt_isol_shmem_read_mapping_page(mapping, i);
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 
@@ -245,7 +247,7 @@ i915_gem_object_put_pages_phys(struct drm_i915_gem_object *obj)
 			struct page *page;
 			char *dst;
 
-			page = shmem_read_mapping_page(mapping, i);
+			page = vgt_isol_shmem_read_mapping_page(mapping, i);
 			if (IS_ERR(page))
 				continue;
 
@@ -647,6 +649,7 @@ i915_gem_shmem_pread(struct drm_device *dev,
 		if ((shmem_page_offset + page_length) > PAGE_SIZE)
 			page_length = PAGE_SIZE - shmem_page_offset;
 
+		BUG();
 		page_do_bit17_swizzling = obj_do_bit17_swizzling &&
 			(page_to_phys(page) & (1 << 17)) != 0;
 
@@ -971,7 +974,7 @@ i915_gem_shmem_pwrite(struct drm_device *dev,
 		page_length = remain;
 		if ((shmem_page_offset + page_length) > PAGE_SIZE)
 			page_length = PAGE_SIZE - shmem_page_offset;
-
+		
 		/* If we don't overwrite a cacheline completely we need to be
 		 * careful to have up-to-date data by first clflushing. Don't
 		 * overcomplicate things and flush the entire patch. */
@@ -1235,9 +1238,6 @@ int __i915_wait_request(struct drm_i915_gem_request *req,
 	before = ktime_get_raw_ns();
 
 	/* Optimistic spin for the next jiffie before touching IRQs */
-	ret = __i915_spin_request(req);
-	if (ret == 0)
-		goto out;
 
 	if (!irq_test_in_progress && WARN_ON(!ring->irq_get(ring))) {
 		ret = -ENODEV;
@@ -1285,7 +1285,6 @@ int __i915_wait_request(struct drm_i915_gem_request *req,
 			mod_timer(&timer, expire);
 		}
 
-		io_schedule();
 
 		if (timer.function) {
 			del_singleshot_timer_sync(&timer);
@@ -1495,6 +1494,8 @@ i915_gem_object_retire_request(struct drm_i915_gem_object *obj,
 	__i915_gem_request_retire__upto(req);
 }
 
+void isol_delay(void);
+
 /* A nonblocking variant of the above wait. This is a highly dangerous routine
  * as the object state may change during this call.
  */
@@ -1541,11 +1542,8 @@ i915_gem_object_wait_rendering__nonblocking(struct drm_i915_gem_object *obj,
 		}
 	}
 
-	mutex_unlock(&dev->struct_mutex);
-	for (i = 0; ret == 0 && i < n; i++)
-		ret = __i915_wait_request(requests[i], reset_counter, true,
-					  NULL, rps);
-	mutex_lock(&dev->struct_mutex);
+
+	isol_delay();
 
 	for (i = 0; i < n; i++) {
 		if (ret == 0)
@@ -1685,7 +1683,7 @@ i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
 	if (args->flags & ~(I915_MMAP_WC))
 		return -EINVAL;
 
-	if (args->flags & I915_MMAP_WC && !cpu_has_pat)
+	if (args->flags & I915_MMAP_WC)
 		return -ENODEV;
 
 	obj = drm_gem_object_lookup(dev, file, args->handle);
@@ -1718,7 +1716,7 @@ i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
 	}
 	drm_gem_object_unreference_unlocked(obj);
 	if (IS_ERR((void *)addr))
-		return addr;
+		BUG();
 
 	args->addr_ptr = (uint64_t) addr;
 
@@ -1740,6 +1738,11 @@ i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
  * from the GTT and/or fence registers to make room.  So performance may
  * suffer if the GTT working set is large or there are few fence registers
  * left.
+ */
+/*
+ * Repurposed the fault. It does not create mappings anymore.
+ * It only returns the address of the object. We call the fault before returning
+ * from mmap.
  */
 int i915_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
@@ -1812,44 +1815,8 @@ int i915_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 		i915_gem_obj_ggtt_offset_view(obj, &view);
 	pfn >>= PAGE_SHIFT;
 
-	if (unlikely(view.type == I915_GGTT_VIEW_PARTIAL)) {
-		/* Overriding existing pages in partial view does not cause
-		 * us any trouble as TLBs are still valid because the fault
-		 * is due to userspace losing part of the mapping or never
-		 * having accessed it before (at this partials' range).
-		 */
-		unsigned long base = vma->vm_start +
-				     (view.params.partial.offset << PAGE_SHIFT);
-		unsigned int i;
+	vmf->virtual_address = (unsigned long) vgt_isol_shmem_kmap_page(&obj->base, 0);
 
-		for (i = 0; i < view.params.partial.size; i++) {
-			ret = vm_insert_pfn(vma, base + i * PAGE_SIZE, pfn + i);
-			if (ret)
-				break;
-		}
-
-		obj->fault_mappable = true;
-	} else {
-		if (!obj->fault_mappable) {
-			unsigned long size = min_t(unsigned long,
-						   vma->vm_end - vma->vm_start,
-						   obj->base.size);
-			int i;
-
-			for (i = 0; i < size >> PAGE_SHIFT; i++) {
-				ret = vm_insert_pfn(vma,
-						    (unsigned long)vma->vm_start + i * PAGE_SIZE,
-						    pfn + i);
-				if (ret)
-					break;
-			}
-
-			obj->fault_mappable = true;
-		} else
-			ret = vm_insert_pfn(vma,
-					    (unsigned long)vmf->virtual_address,
-					    pfn + page_offset);
-	}
 unpin:
 	i915_gem_object_ggtt_unpin_view(obj, &view);
 unlock:
@@ -2100,7 +2067,7 @@ i915_gem_object_truncate(struct drm_i915_gem_object *obj)
 	 * To do this we must instruct the shmfs to drop all of its
 	 * backing pages, *now*.
 	 */
-	shmem_truncate_range(file_inode(obj->base.filp), 0, (loff_t)-1);
+	vgt_isol_shmem_truncate_range(file_inode(obj->base.filp), 0, (loff_t)-1);
 	obj->madv = __I915_MADV_PURGED;
 }
 
@@ -2150,17 +2117,9 @@ i915_gem_object_put_pages_gtt(struct drm_i915_gem_object *obj)
 	if (obj->madv == I915_MADV_DONTNEED)
 		obj->dirty = 0;
 
-	for_each_sg_page(obj->pages->sgl, &sg_iter, obj->pages->nents, 0) {
-		struct page *page = sg_page_iter_page(&sg_iter);
 
-		if (obj->dirty)
-			set_page_dirty(page);
 
-		if (obj->madv == I915_MADV_WILLNEED)
-			mark_page_accessed(page);
 
-		page_cache_release(page);
-	}
 	obj->dirty = 0;
 
 	sg_free_table(obj->pages);
@@ -2236,14 +2195,14 @@ i915_gem_object_get_pages_gtt(struct drm_i915_gem_object *obj)
 	sg = st->sgl;
 	st->nents = 0;
 	for (i = 0; i < page_count; i++) {
-		page = shmem_read_mapping_page_gfp(mapping, i, gfp);
+		page = vgt_isol_shmem_read_mapping_page_gfp(mapping, i, gfp);
 		if (IS_ERR(page)) {
 			i915_gem_shrink(dev_priv,
 					page_count,
 					I915_SHRINK_BOUND |
 					I915_SHRINK_UNBOUND |
 					I915_SHRINK_PURGEABLE);
-			page = shmem_read_mapping_page_gfp(mapping, i, gfp);
+			page = vgt_isol_shmem_read_mapping_page_gfp(mapping, i, gfp);
 		}
 		if (IS_ERR(page)) {
 			/* We've tried hard to allocate the memory by reaping
@@ -2251,7 +2210,7 @@ i915_gem_object_get_pages_gtt(struct drm_i915_gem_object *obj)
 			 * go down in flames if truly OOM.
 			 */
 			i915_gem_shrink_all(dev_priv);
-			page = shmem_read_mapping_page(mapping, i);
+			page = vgt_isol_shmem_read_mapping_page(mapping, i);
 			if (IS_ERR(page)) {
 				ret = PTR_ERR(page);
 				goto err_pages;
@@ -2265,6 +2224,7 @@ i915_gem_object_get_pages_gtt(struct drm_i915_gem_object *obj)
 			continue;
 		}
 #endif
+
 		if (!i || page_to_pfn(page) != last_pfn + 1) {
 			if (i)
 				sg = sg_next(sg);
@@ -2540,9 +2500,9 @@ void __i915_add_request(struct drm_i915_gem_request *request,
 	 */
 	request->postfix = intel_ring_get_tail(ringbuf);
 
-	if (i915.enable_execlists)
+	if (i915.enable_execlists) {
 		ret = ring->emit_request(request);
-	else {
+	} else {
 		ret = ring->add_request(request);
 
 		request->tail = intel_ring_get_tail(ringbuf);
@@ -2568,9 +2528,6 @@ void __i915_add_request(struct drm_i915_gem_request *request,
 
 	i915_queue_hangcheck(ring->dev);
 
-	queue_delayed_work(dev_priv->wq,
-			   &dev_priv->mm.retire_work,
-			   round_jiffies_up_relative(HZ));
 	intel_mark_busy(dev_priv->dev);
 
 	/* Sanity check that the reserved size was large enough. */
@@ -4375,8 +4332,6 @@ struct drm_i915_gem_object *i915_gem_alloc_object(struct drm_device *dev,
 		mask |= __GFP_DMA32;
 	}
 
-	mapping = file_inode(obj->base.filp)->i_mapping;
-	mapping_set_gfp_mask(mapping, mask);
 
 	i915_gem_object_init(obj, &i915_gem_object_ops);
 

@@ -23,6 +23,7 @@
 #include <kern_util.h>
 #include <mem_user.h>
 #include <os.h>
+#include <linux/prints.h>
 
 #define DEFAULT_COMMAND_LINE "root=98:0"
 
@@ -47,7 +48,8 @@ static void __init add_arg(char *arg)
  */
 struct cpuinfo_um boot_cpu_data = {
 	.loops_per_jiffy	= 0,
-	.ipi_pipe		= { -1, -1 }
+	.ipi_pipe		= { -1, -1 },
+	.x86_clflush_size	= 0x40
 };
 
 union thread_union cpu0_irqstack
@@ -116,7 +118,7 @@ int ncpus = 1;
 static int have_root __initdata = 0;
 
 /* Set in uml_mem_setup and modified in linux_main */
-long long physmem_size = 32 * 1024 * 1024;
+long long physmem_size = 0x4000000; 
 
 static const char *usage_string =
 "User Mode Linux v%s\n"
@@ -275,7 +277,6 @@ int __init linux_main(int argc, char **argv)
 	task_size = host_task_size & PGDIR_MASK;
 
 	/* OS sanity checks that need to happen before the kernel runs */
-	os_early_checks();
 
 	brk_start = (unsigned long) sbrk(0);
 
@@ -285,17 +286,12 @@ int __init linux_main(int argc, char **argv)
 	 * add zero for non-exec shield users
 	 */
 
-	diff = UML_ROUND_UP(brk_start) - UML_ROUND_UP(&_end);
-	if (diff > 1024 * 1024) {
-		printf("Adding %ld bytes to physical memory to account for "
-		       "exec-shield gap\n", diff);
-		physmem_size += UML_ROUND_UP(brk_start) - UML_ROUND_UP(&_end);
-	}
 
-	uml_physmem = (unsigned long) __binary_start & PAGE_MASK;
+	uml_physmem = brk_start & PAGE_MASK;
 
 	/* Reserve up to 4M after the current brk */
-	uml_reserved = ROUND_4M(brk_start) + (1 << 22);
+	uml_reserved = brk_start + SMALL_VMALLOC_SIZE;
+
 
 	setup_machinename(init_utsname()->machine);
 
@@ -328,7 +324,7 @@ int __init linux_main(int argc, char **argv)
 	avail = stack - start_vm;
 	if (physmem_size > avail)
 		virtmem_size = avail;
-	end_vm = start_vm + virtmem_size;
+	end_vm = VMALLOC_END;
 
 	if (virtmem_size < physmem_size)
 		printf("Kernel virtual memory size shrunk to %lu bytes\n",
@@ -336,6 +332,7 @@ int __init linux_main(int argc, char **argv)
 
 	stack_protections((unsigned long) &init_thread_info);
 	os_flush_stdout();
+
 
 	return start_uml();
 }

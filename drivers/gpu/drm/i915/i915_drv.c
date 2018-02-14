@@ -39,6 +39,9 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <drm/drm_crtc_helper.h>
+#include <linux/prints.h>
+#include <drm/i915_vgt_isol.h>
+#include "../../../pci/pci.h"
 
 bool i915_host_mediate __read_mostly = false;
 
@@ -1749,7 +1752,7 @@ static const struct vm_operations_struct i915_gem_vm_ops = {
 	.close = drm_gem_vm_close,
 };
 
-static const struct file_operations i915_driver_fops = {
+const struct file_operations i915_driver_fops = {
 	.owner = THIS_MODULE,
 	.open = drm_open,
 	.release = drm_release,
@@ -1851,6 +1854,454 @@ static void __exit i915_exit(void)
 
 module_init(i915_init);
 module_exit(i915_exit);
+
+#ifdef CONFIG_ISOL_USER
+
+int drm_user_init(void);
+
+static int domainnr = 0; 
+static int busnr = 0;
+
+extern struct pci_dev *g_pdev;
+
+/* the same as alloc_pci_dev. */
+struct pci_dev *drm_alloc_pci_dev(void)
+{
+	struct pci_dev *dev;
+
+	dev = kzalloc(sizeof(struct pci_dev), GFP_KERNEL);
+	if (!dev)
+		return NULL;
+
+	INIT_LIST_HEAD(&dev->bus_list);
+
+	return dev;
+}
+
+/* from drivers/pci/probe.c */
+static inline unsigned long decode_bar(struct pci_dev *dev, u32 bar)
+{
+	u32 mem_type;
+	unsigned long flags;
+
+	if ((bar & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO) {
+		flags = bar & ~PCI_BASE_ADDRESS_IO_MASK;
+		flags |= IORESOURCE_IO;
+		return flags;
+	}
+
+	flags = bar & ~PCI_BASE_ADDRESS_MEM_MASK;
+	flags |= IORESOURCE_MEM;
+	if (flags & PCI_BASE_ADDRESS_MEM_PREFETCH)
+		flags |= IORESOURCE_PREFETCH;
+
+	mem_type = bar & PCI_BASE_ADDRESS_MEM_TYPE_MASK;
+	switch (mem_type) {
+	case PCI_BASE_ADDRESS_MEM_TYPE_32:
+		break;
+	case PCI_BASE_ADDRESS_MEM_TYPE_1M:
+		/* 1M mem BAR treated as 32-bit BAR */
+		break;
+	case PCI_BASE_ADDRESS_MEM_TYPE_64:
+		flags |= IORESOURCE_MEM_64;
+		break;
+	default:
+		/* mem unknown type treated as 32-bit BAR */
+		break;
+	}
+	return flags;
+}
+
+/* from drivers/pci/probe.c */
+static u64 pci_size(u64 base, u64 maxbase, u64 mask)
+{
+	u64 size = mask & maxbase;	/* Find the significant bits */
+	if (!size)
+		return 0;
+
+	/* Get the lowest of them to find the decode size, and
+	   from that the extent.  */
+	size = (size & ~(size-1)) - 1;
+
+	/* base == maxbase can be valid only if the BAR has
+	   already been programmed with all 1s.  */
+	if (base == maxbase && ((base | size) & mask) != mask)
+		return 0;
+
+	return size;
+}
+
+/* adapted and modified from drivers/pci/probe.c */
+#define PCI_COMMAND_DECODE_ENABLE	(PCI_COMMAND_MEMORY | PCI_COMMAND_IO)
+int __vgt_isol_pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
+		    struct resource *res, unsigned int pos)
+{
+	u32 l, sz, mask;
+	u64 l64, sz64, mask64;
+	u16 orig_cmd;
+	struct pci_bus_region region, inverted_region;
+
+	mask = type ? PCI_ROM_ADDRESS_MASK : ~0;
+
+	/* No printks while decoding is disabled! */
+	if (!dev->mmio_always_on) {
+		vgt_isol_pci_read_config_word(dev, PCI_COMMAND, &orig_cmd);
+		if (orig_cmd & PCI_COMMAND_DECODE_ENABLE) {
+			vgt_isol_pci_write_config_word(dev, PCI_COMMAND,
+				orig_cmd & ~PCI_COMMAND_DECODE_ENABLE);
+		}
+	}
+
+	res->name = pci_name(dev);
+
+	vgt_isol_pci_read_config_dword(dev, pos, &l);
+	vgt_isol_pci_write_config_dword(dev, pos, l | mask);
+	vgt_isol_pci_read_config_dword(dev, pos, &sz);
+	vgt_isol_pci_write_config_dword(dev, pos, l);
+
+	/*
+	 * All bits set in sz means the device isn't working properly.
+	 * If the BAR isn't implemented, all bits must be 0.  If it's a
+	 * memory BAR or a ROM, bit 0 must be clear; if it's an io BAR, bit
+	 * 1 must be clear.
+	 */
+	if (sz == 0xffffffff)
+		sz = 0;
+
+	if (l == 0xffffffff)
+		l = 0;
+
+	if (type == pci_bar_unknown) {
+		res->flags = decode_bar(dev, l);
+		res->flags |= IORESOURCE_SIZEALIGN;
+		if (res->flags & IORESOURCE_IO) {
+			l64 = l & PCI_BASE_ADDRESS_IO_MASK;
+			sz64 = sz & PCI_BASE_ADDRESS_IO_MASK;
+			mask64 = PCI_BASE_ADDRESS_IO_MASK & (u32)IO_SPACE_LIMIT;
+		} else {
+			l64 = l & PCI_BASE_ADDRESS_MEM_MASK;
+			sz64 = sz & PCI_BASE_ADDRESS_MEM_MASK;
+			mask64 = (u32)PCI_BASE_ADDRESS_MEM_MASK;
+		}
+	} else {
+		res->flags |= (l & IORESOURCE_ROM_ENABLE);
+		l64 = l & PCI_ROM_ADDRESS_MASK;
+		sz64 = sz & PCI_ROM_ADDRESS_MASK;
+		mask64 = (u32)PCI_ROM_ADDRESS_MASK;
+	}
+
+	if (res->flags & IORESOURCE_MEM_64) {
+		vgt_isol_pci_read_config_dword(dev, pos + 4, &l);
+		vgt_isol_pci_write_config_dword(dev, pos + 4, ~0);
+		vgt_isol_pci_read_config_dword(dev, pos + 4, &sz);
+		vgt_isol_pci_write_config_dword(dev, pos + 4, l);
+
+		l64 |= ((u64)l << 32);
+		sz64 |= ((u64)sz << 32);
+		mask64 |= ((u64)~0 << 32);
+	}
+
+	if (!dev->mmio_always_on && (orig_cmd & PCI_COMMAND_DECODE_ENABLE))
+		vgt_isol_pci_write_config_word(dev, PCI_COMMAND, orig_cmd);
+
+	if (!sz64)
+		goto fail;
+
+	sz64 = pci_size(l64, sz64, mask64);
+	if (!sz64) {
+		dev_info(&dev->dev, FW_BUG "reg 0x%x: invalid BAR (can't size)\n",
+			 pos);
+		goto fail;
+	}
+
+	if (res->flags & IORESOURCE_MEM_64) {
+		if ((sizeof(pci_bus_addr_t) < 8 || sizeof(resource_size_t) < 8)
+		    && sz64 > 0x100000000ULL) {
+			res->flags |= IORESOURCE_UNSET | IORESOURCE_DISABLED;
+			res->start = 0;
+			res->end = 0;
+			dev_err(&dev->dev, "reg 0x%x: can't handle BAR larger than 4GB (size %#010llx)\n",
+				pos, (unsigned long long)sz64);
+			goto out;
+		}
+
+		if ((sizeof(pci_bus_addr_t) < 8) && l) {
+			/* Above 32-bit boundary; try to reallocate */
+			res->flags |= IORESOURCE_UNSET;
+			res->start = 0;
+			res->end = sz64;
+			dev_info(&dev->dev, "reg 0x%x: can't handle BAR above 4GB (bus address %#010llx)\n",
+				 pos, (unsigned long long)l64);
+			goto out;
+		}
+	}
+
+	region.start = l64;
+	region.end = l64 + sz64;
+
+	/*
+	 * If "A" is a BAR value (a bus address), "bus_to_resource(A)" is
+	 * the corresponding resource address (the physical address used by
+	 * the CPU.  Converting that resource address back to a bus address
+	 * should yield the original BAR value:
+	 *
+	 *     resource_to_bus(bus_to_resource(A)) == A
+	 *
+	 * If it doesn't, CPU accesses to "bus_to_resource(A)" will not
+	 * be claimed by the device.
+	 */
+	if (inverted_region.start != region.start) {
+		res->flags |= IORESOURCE_UNSET;
+		res->start = 0;
+		res->end = region.end - region.start;
+		dev_info(&dev->dev, "reg 0x%x: initial BAR value %#010llx invalid\n",
+			 pos, (unsigned long long)region.start);
+	}
+
+	goto out;
+
+fail:
+	res->flags = 0;
+out:
+	if (res->flags)
+		dev_printk(KERN_DEBUG, &dev->dev, "reg 0x%x: %pR\n", pos, res);
+
+	return (res->flags & IORESOURCE_MEM_64) ? 1 : 0;
+}
+
+/* adapted and modified from drivers/pci/probe.c */
+static void vgt_isol_pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
+{
+	unsigned int pos, reg;
+	unsigned int tmp;
+
+	for (pos = 0; pos < howmany; pos++) {
+		struct resource *res = &dev->resource[pos];
+		tmp = pos;
+		reg = PCI_BASE_ADDRESS_0 + (pos << 2);
+		pos += __vgt_isol_pci_read_base(dev, pci_bar_unknown, res, reg);
+	}
+
+	if (rom) {
+		struct resource *res = &dev->resource[PCI_ROM_RESOURCE];
+		dev->rom_base_reg = rom;
+		res->flags = IORESOURCE_MEM | IORESOURCE_PREFETCH |
+				IORESOURCE_READONLY | IORESOURCE_CACHEABLE |
+				IORESOURCE_SIZEALIGN;
+		__vgt_isol_pci_read_base(dev, pci_bar_mem32, res, rom);
+	}
+}
+
+/* adapted and modified from drivers/pci/probe.c */
+static bool vgt_isol_pci_ext_cfg_is_aliased(struct pci_dev *dev)
+{
+#ifdef CONFIG_PCI_QUIRKS
+	int pos;
+	u32 header, tmp;
+
+	vgt_isol_pci_read_config_dword(dev, PCI_VENDOR_ID, &header);
+
+	for (pos = PCI_CFG_SPACE_SIZE;
+	     pos < PCI_CFG_SPACE_EXP_SIZE; pos += PCI_CFG_SPACE_SIZE) {
+		if (vgt_isol_pci_read_config_dword(dev, pos, &tmp) != PCIBIOS_SUCCESSFUL
+		    || header != tmp)
+			return false;
+	}
+
+	return true;
+#else
+	return false;
+#endif
+}
+
+/* adapted and modified from drivers/pci/probe.c */
+static int vgt_isol_pci_cfg_space_size_ext(struct pci_dev *dev)
+{
+	u32 status;
+	int pos = PCI_CFG_SPACE_SIZE;
+
+	if (pci_read_config_dword(dev, pos, &status) != PCIBIOS_SUCCESSFUL)
+		goto fail;
+	if (status == 0xffffffff || vgt_isol_pci_ext_cfg_is_aliased(dev))
+		goto fail;
+
+	return PCI_CFG_SPACE_EXP_SIZE;
+
+ fail:
+	return PCI_CFG_SPACE_SIZE;
+}
+
+/* adapted and modified from drivers/pci/probe.c */
+int vgt_isol_pci_cfg_space_size(struct pci_dev *dev)
+{
+	int pos;
+	u32 status;
+	u16 class;
+
+	class = dev->class >> 8;
+	if (class == PCI_CLASS_BRIDGE_HOST)
+		BUG();
+
+	if (!pci_is_pcie(dev)) {
+		BUG();
+
+	}
+
+	return vgt_isol_pci_cfg_space_size_ext(dev);
+
+ fail:
+	return PCI_CFG_SPACE_SIZE;
+}
+
+/* adapted and modified from drivers/pci/probe.c */
+int vgt_isol_pci_setup_device(struct pci_dev *dev)
+{
+	u32 class;
+	u8 hdr_type;
+	struct pci_slot *slot;
+	int pos = 0;
+	struct pci_bus_region region;
+	struct resource *res;
+
+	if (vgt_isol_pci_read_config_byte(dev, PCI_HEADER_TYPE, &hdr_type))
+		return -EIO;
+
+	dev->hdr_type = hdr_type & 0x7f;
+	dev->multifunction = !!(hdr_type & 0x80);
+	dev->error_state = pci_channel_io_normal;
+
+	/* Assume 32-bit PCI; let 64-bit PCI cards (which are far rarer)
+	   set this higher, assuming the system even supports it.  */
+	dev->dma_mask = 0xffffffff;
+
+	dev_set_name(&dev->dev, "%04x:%02x:%02x.%d", domainnr,
+		     busnr, PCI_SLOT(dev->devfn),
+		     PCI_FUNC(dev->devfn));
+
+	vgt_isol_pci_read_config_dword(dev, PCI_CLASS_REVISION, &class);
+	dev->revision = class & 0xff;
+	dev->class = class >> 8;		    /* upper 3 bytes */
+
+	dev_printk(KERN_DEBUG, &dev->dev, "[%04x:%04x] type %02x class %#08x\n",
+		   dev->vendor, dev->device, dev->hdr_type, dev->class);
+
+	/* need to have dev->class ready */
+	dev->cfg_size = vgt_isol_pci_cfg_space_size(dev);
+
+	/* "Unknown power state" */
+	dev->current_state = PCI_UNKNOWN;
+
+	/* Early fixups, before probing the BARs */
+	/* device class may be changed after fixup */
+	class = dev->class >> 8;
+
+	switch (dev->hdr_type) {		    /* header type */
+	case PCI_HEADER_TYPE_NORMAL:		    /* standard header */
+		if (class == PCI_CLASS_BRIDGE_PCI)
+			goto bad;
+		vgt_isol_pci_read_bases(dev, 6, PCI_ROM_ADDRESS);
+		vgt_isol_pci_read_config_word(dev, PCI_SUBSYSTEM_VENDOR_ID, &dev->subsystem_vendor);
+		vgt_isol_pci_read_config_word(dev, PCI_SUBSYSTEM_ID, &dev->subsystem_device);
+
+		/*
+		 * Do the ugly legacy mode stuff here rather than broken chip
+		 * quirk code. Legacy mode ATA controllers have fixed
+		 * addresses. These are not always echoed in BAR0-3, and
+		 * BAR0-3 in a few cases contain junk!
+		 */
+		if (class == PCI_CLASS_STORAGE_IDE) {
+			BUG();
+		}
+		break;
+
+	case PCI_HEADER_TYPE_BRIDGE:		    /* bridge header */
+		BUG();
+		break;
+
+	case PCI_HEADER_TYPE_CARDBUS:		    /* CardBus bridge header */
+		BUG();
+		break;
+
+	default:				    /* unknown header */
+		dev_err(&dev->dev, "unknown header type %02x, ignoring device\n",
+			dev->hdr_type);
+		return -EIO;
+
+	bad:
+		dev_err(&dev->dev, "ignoring class %#08x (doesn't match header type %02x)\n",
+			dev->class, dev->hdr_type);
+		dev->class = PCI_CLASS_NOT_DEFINED;
+	}
+
+	vgt_isol_pci_write_config_word(dev, PCI_COMMAND, PCI_COMMAND_MEMORY);
+
+	return 0;
+}
+
+int __init i915_user_init(void)
+{
+	char pci_device_name[32];
+	struct pci_dev *pdev;
+	struct pci_device_id *pdevid;
+	unsigned char dev_node_name[32];
+	unsigned int devfn;
+	unsigned short vendor;
+	unsigned short device;
+	unsigned short subsystem_vendor;
+	unsigned short subsystem_device;
+	unsigned int class;
+	int cfg_size;
+	char driver_name[32];
+	u8 *config;
+	unsigned long *resources;
+
+	drm_user_init();
+	
+	i915_init();
+	
+	devfn = 0x20; /* device number = 2, function number = 0 */
+	vendor = 0x8086;
+	device = 0x1622;
+	
+	pdev = drm_alloc_pci_dev();
+	if (!pdev)
+		return -ENOMEM;
+
+	pdev->dev.bus = NULL;
+	pdev->dev.parent = NULL;
+	
+	pdev->bus = NULL; 
+
+	pdev->devfn = devfn;
+	pdev->vendor = vendor;
+	pdev->pcie_cap = 1;
+	pdev->mmio_always_on = 1;
+
+	if (vgt_isol_pci_setup_device(pdev))
+		return -EFAULT;
+
+	pdev->device = device;
+	pdev->driver = NULL;
+	
+	pdevid = (struct pci_device_id *) kmalloc(sizeof(struct pci_device_id),
+								GFP_KERNEL);
+	pdevid->vendor = pdev->vendor;
+	pdevid->device = pdev->device;
+	pdevid->subvendor = pdev->subsystem_vendor;
+	pdevid->subdevice = pdev->subsystem_device;
+	pdevid->class = pdev->class;
+	pdevid->driver_data = &intel_broadwell_gt3m_info; 
+	
+	g_pdev = pdev;
+
+	vgt_isol_pci_write_config_word(pdev, 0x92, 0x1);
+	
+	i915_pci_probe(pdev, pdevid);
+	
+	return 0;
+}
+
+#endif /* CONFIG_ISOL_USER */
 
 MODULE_AUTHOR("Tungsten Graphics, Inc.");
 MODULE_AUTHOR("Intel Corporation");

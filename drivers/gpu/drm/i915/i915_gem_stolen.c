@@ -29,6 +29,7 @@
 #include <drm/drmP.h>
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
+#include <drm/i915_vgt_isol.h>
 
 #define KB(x) ((x) * 1024)
 #define MB(x) (KB(x) * 1024)
@@ -107,7 +108,7 @@ static unsigned long i915_stolen_to_physical(struct drm_device *dev)
 	base = 0;
 	if (INTEL_INFO(dev)->gen >= 3) {
 		/* Read Graphics Base of Stolen Memory directly */
-		pci_read_config_dword(dev->pdev, 0x5c, &base);
+		vgt_isol_pci_read_config_dword(dev->pdev, 0x5c, &base);
 		base &= ~((1<<20) - 1);
 	} else if (IS_I865G(dev)) {
 		u16 toud = 0;
@@ -494,6 +495,7 @@ i915_pages_create_for_stolen(struct drm_device *dev,
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct sg_table *st;
 	struct scatterlist *sg;
+	BUG(); 
 
 	DRM_DEBUG_DRIVER("offset=0x%x, size=%d\n", offset, size);
 	BUG_ON(offset > dev_priv->gtt.stolen_size - size);

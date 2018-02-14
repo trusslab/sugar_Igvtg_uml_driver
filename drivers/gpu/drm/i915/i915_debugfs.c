@@ -1546,6 +1546,7 @@ static int gen6_drpc_info(struct seq_file *m)
 		seq_printf(m, "RC information accurate: %s\n", yesno(count < 51));
 	}
 
+	BUG();
 	gt_core_status = readl(dev_priv->regs + GEN6_GT_CORE_STATUS);
 	trace_i915_reg_rw(false, GEN6_GT_CORE_STATUS, gt_core_status, 4, true);
 
@@ -2149,6 +2150,66 @@ static int i915_execlists(struct seq_file *m, void *data)
 
 	return 0;
 }
+
+#ifdef I915_VGT_ISOL_DEBUG
+int print_i915_execlists(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct intel_engine_cs *ring;
+	u32 status_pointer;
+	u8 read_pointer;
+	u8 write_pointer;
+	u32 status;
+	u32 ctx_id;
+	struct list_head *cursor;
+	int ring_id, i;
+	int ret;
+	u32 seqno;
+
+	if (!i915.enable_execlists) {
+		return 0;
+	}
+
+	for_each_ring(ring, dev_priv, ring_id) {
+		struct drm_i915_gem_request *head_req = NULL;
+		int count = 0;
+		unsigned long flags;
+
+		status = I915_READ(RING_EXECLIST_STATUS_LO(ring));
+		ctx_id = I915_READ(RING_EXECLIST_STATUS_HI(ring));
+
+		status_pointer = I915_READ(RING_CONTEXT_STATUS_PTR(ring));
+
+		read_pointer = ring->next_context_status_buffer;
+		write_pointer = status_pointer & 0x07;
+		if (read_pointer > write_pointer)
+			write_pointer += 6;
+
+		for (i = 0; i < 6; i++) {
+			status = I915_READ(RING_CONTEXT_STATUS_BUF_LO(ring, i));
+			ctx_id = I915_READ(RING_CONTEXT_STATUS_BUF_HI(ring, i));
+
+		}
+
+		spin_lock_irqsave(&ring->execlist_lock, flags);
+		list_for_each(cursor, &ring->execlist_queue)
+			count++;
+		head_req = list_first_entry_or_null(&ring->execlist_queue,
+				struct drm_i915_gem_request, execlist_link);
+		spin_unlock_irqrestore(&ring->execlist_lock, flags);
+
+		if (head_req) {
+			struct drm_i915_gem_object *ctx_obj;
+
+			ctx_obj = head_req->ctx->engine[ring_id].state;
+		}
+
+		seqno = ring->get_seqno(ring, true);
+	}
+
+	return 0;
+}
+#endif /* I915_VGT_ISOL_DEBUG */
 
 static const char *swizzle_string(unsigned swizzle)
 {

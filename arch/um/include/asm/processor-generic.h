@@ -94,6 +94,7 @@ extern void start_thread(struct pt_regs *regs, unsigned long entry,
 struct cpuinfo_um {
 	unsigned long loops_per_jiffy;
 	int ipi_pipe[2];
+	int x86_clflush_size;
 };
 
 extern struct cpuinfo_um boot_cpu_data;

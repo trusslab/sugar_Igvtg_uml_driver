@@ -42,6 +42,7 @@
 
 #include "drm_crtc_internal.h"
 #include "drm_internal.h"
+#include <linux/prints.h>
 
 static struct drm_framebuffer *
 internal_framebuffer_create(struct drm_device *dev,

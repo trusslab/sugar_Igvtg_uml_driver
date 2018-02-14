@@ -29,6 +29,7 @@
 #include <drm/drmP.h>
 #include "drm_internal.h"
 #include "drm_legacy.h"
+#include <linux/prints.h>
 
 /**
  * drm_pci_alloc - Allocate a PCI consistent memory block, for DMA.
@@ -113,7 +114,7 @@ void drm_pci_free(struct drm_device * dev, drm_dma_handle_t * dmah)
 
 EXPORT_SYMBOL(drm_pci_free);
 
-#ifdef CONFIG_PCI
+#if defined(CONFIG_PCI) || defined(CONFIG_ISOL_USER)
 
 static int drm_get_pci_domain(struct drm_device *dev)
 {
@@ -131,15 +132,8 @@ static int drm_get_pci_domain(struct drm_device *dev)
 
 int drm_pci_set_busid(struct drm_device *dev, struct drm_master *master)
 {
-	master->unique = kasprintf(GFP_KERNEL, "pci:%04x:%02x:%02x.%d",
-					drm_get_pci_domain(dev),
-					dev->pdev->bus->number,
-					PCI_SLOT(dev->pdev->devfn),
-					PCI_FUNC(dev->pdev->devfn));
-	if (!master->unique)
-		return -ENOMEM;
 
-	master->unique_len = strlen(master->unique);
+	BUG();
 	return 0;
 }
 EXPORT_SYMBOL(drm_pci_set_busid);
@@ -283,9 +277,6 @@ int drm_get_pci_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 	if (!dev)
 		return -ENOMEM;
 
-	ret = pci_enable_device(pdev);
-	if (ret)
-		goto err_free;
 
 	dev->pdev = pdev;
 #ifdef __alpha__
@@ -295,7 +286,6 @@ int drm_get_pci_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 	if (drm_core_check_feature(dev, DRIVER_MODESET))
 		pci_set_drvdata(pdev, dev);
 
-	drm_pci_agp_init(dev);
 
 	ret = drm_dev_register(dev, ent->driver_data);
 	if (ret)
@@ -370,6 +360,11 @@ int drm_pci_init(struct drm_driver *driver, struct pci_driver *pdriver)
 		}
 	}
 	return 0;
+}
+
+static int pcie_capability_read_dword(struct pci_dev *dev, int pos, u32 *val)
+{
+	BUG();
 }
 
 int drm_pcie_get_speed_cap_mask(struct drm_device *dev, u32 *mask)

@@ -56,6 +56,11 @@ static ssize_t vgt_create_instance_store(struct kobject *kobj, struct kobj_attri
 		&vp.cap);
 	vp.aperture_sz = low_gm_sz;
 	vp.gm_sz = high_gm_sz + low_gm_sz;
+	printk("%s [1]: param_cnt = %d, vp.vm_id = %d, low_gm_sz = %d, "
+	       "high_gm_sz = %d, vp.fence_size = %d, vp.vgt_primary = %d, "
+	       "vp.is_local = %d\n",
+	       __func__, param_cnt, vp.vm_id, low_gm_sz,
+	       high_gm_sz, vp.fence_sz, vp.vgt_primary, vp.is_local);
 
 	if (param_cnt == 1) {
 		if (vp.vm_id >= 0)

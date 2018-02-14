@@ -677,6 +677,7 @@ int bus_add_driver(struct device_driver *drv)
 	struct bus_type *bus;
 	struct driver_private *priv;
 	int error = 0;
+	return 0;
 
 	bus = bus_get(drv->bus);
 	if (!bus)
@@ -693,10 +694,6 @@ int bus_add_driver(struct device_driver *drv)
 	priv->driver = drv;
 	drv->p = priv;
 	priv->kobj.kset = bus->p->drivers_kset;
-	error = kobject_init_and_add(&priv->kobj, &driver_ktype, NULL,
-				     "%s", drv->name);
-	if (error)
-		goto out_unregister;
 
 	klist_add_tail(&priv->knode_bus, &bus->p->klist_drivers);
 	if (drv->bus->p->drivers_autoprobe) {
@@ -712,31 +709,10 @@ int bus_add_driver(struct device_driver *drv)
 	}
 	module_add_driver(drv->owner, drv);
 
-	error = driver_create_file(drv, &driver_attr_uevent);
-	if (error) {
-		printk(KERN_ERR "%s: uevent attr (%s) failed\n",
-			__func__, drv->name);
-	}
-	error = driver_add_groups(drv, bus->drv_groups);
-	if (error) {
-		/* How the hell do we get out of this pickle? Give up */
-		printk(KERN_ERR "%s: driver_create_groups(%s) failed\n",
-			__func__, drv->name);
-	}
-
-	if (!drv->suppress_bind_attrs) {
-		error = add_bind_files(drv);
-		if (error) {
-			/* Ditto */
-			printk(KERN_ERR "%s: add_bind_files(%s) failed\n",
-				__func__, drv->name);
-		}
-	}
 
 	return 0;
 
 out_unregister:
-	kobject_put(&priv->kobj);
 	kfree(drv->p);
 	drv->p = NULL;
 out_put_bus:
@@ -900,62 +876,26 @@ int bus_register(struct bus_type *bus)
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&priv->bus_notifier);
 
-	retval = kobject_set_name(&priv->subsys.kobj, "%s", bus->name);
-	if (retval)
-		goto out;
 
-	priv->subsys.kobj.kset = bus_kset;
-	priv->subsys.kobj.ktype = &bus_ktype;
 	priv->drivers_autoprobe = 1;
 
-	retval = kset_register(&priv->subsys);
-	if (retval)
-		goto out;
 
-	retval = bus_create_file(bus, &bus_attr_uevent);
-	if (retval)
-		goto bus_uevent_fail;
-
-	priv->devices_kset = kset_create_and_add("devices", NULL,
-						 &priv->subsys.kobj);
-	if (!priv->devices_kset) {
-		retval = -ENOMEM;
-		goto bus_devices_fail;
-	}
-
-	priv->drivers_kset = kset_create_and_add("drivers", NULL,
-						 &priv->subsys.kobj);
-	if (!priv->drivers_kset) {
-		retval = -ENOMEM;
-		goto bus_drivers_fail;
-	}
 
 	INIT_LIST_HEAD(&priv->interfaces);
 	__mutex_init(&priv->mutex, "subsys mutex", key);
 	klist_init(&priv->klist_devices, klist_devices_get, klist_devices_put);
 	klist_init(&priv->klist_drivers, NULL, NULL);
 
-	retval = add_probe_files(bus);
-	if (retval)
-		goto bus_probe_files_fail;
 
-	retval = bus_add_groups(bus, bus->bus_groups);
-	if (retval)
-		goto bus_groups_fail;
 
 	pr_debug("bus: '%s': registered\n", bus->name);
 	return 0;
 
 bus_groups_fail:
-	remove_probe_files(bus);
 bus_probe_files_fail:
-	kset_unregister(bus->p->drivers_kset);
 bus_drivers_fail:
-	kset_unregister(bus->p->devices_kset);
 bus_devices_fail:
-	bus_remove_file(bus, &bus_attr_uevent);
 bus_uevent_fail:
-	kset_unregister(&bus->p->subsys);
 out:
 	kfree(bus->p);
 	bus->p = NULL;

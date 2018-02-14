@@ -21,12 +21,12 @@
  * SOFTWARE.
  */
 
-#include <linux/io.h>
 #include <drm/drmP.h>
 
 #include <../i915_vgpu.h>
 #include "i915_drv.h"
 #include "host.h"
+#include <linux/io.h>
 
 static struct drm_i915_private *dev_priv = NULL;
 static unsigned long gtt_offset = 0;
@@ -126,6 +126,7 @@ bool vgt_native_gtt_write(u32 reg, void *val, int len)
 bool vgt_host_read(u32 reg, void *val, int len, bool is_gtt, bool trace)
 {
 	uint64_t pa;
+	BUG();
 
 	BUG_ON(!dev_priv);
 
@@ -138,6 +139,7 @@ bool vgt_host_read(u32 reg, void *val, int len, bool is_gtt, bool trace)
 bool vgt_host_write(u32 reg, void *val, int len, bool is_gtt, bool trace)
 {
 	uint64_t pa;
+	BUG();
 
 	BUG_ON(!dev_priv);
 

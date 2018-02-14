@@ -60,6 +60,7 @@
 #include <linux/workqueue.h>
 #include <linux/cgroup.h>
 #include <linux/wait.h>
+#include <linux/prints.h>
 
 struct static_key cpusets_enabled_key __read_mostly = STATIC_KEY_INIT_FALSE;
 

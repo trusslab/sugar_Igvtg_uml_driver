@@ -1998,7 +1998,7 @@ static struct notifier_block i2c_of_notifier = {
 extern struct notifier_block i2c_of_notifier;
 #endif /* CONFIG_OF_DYNAMIC */
 
-static int __init i2c_init(void)
+int __init i2c_init(void)
 {
 	int retval;
 

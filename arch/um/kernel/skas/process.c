@@ -9,6 +9,7 @@
 #include <kern.h>
 #include <os.h>
 #include <skas.h>
+#include <linux/prints.h>
 
 extern void start_kernel(void);
 
@@ -30,6 +31,8 @@ extern int userspace_pid[];
 
 extern char cpu0_irqstack[];
 
+void isol_set_current(void);
+
 int __init start_uml(void)
 {
 	stack_protections((unsigned long) &cpu0_irqstack);
@@ -39,8 +42,12 @@ int __init start_uml(void)
 
 	init_task.thread.request.u.thread.proc = start_kernel_proc;
 	init_task.thread.request.u.thread.arg = NULL;
+#ifndef CONFIG_ISOL_USER
 	return start_idle_thread(task_stack_page(&init_task),
 				 &init_task.thread.switch_buf);
+#else
+	start_kernel();
+#endif
 }
 
 unsigned long current_stub_stack(void)

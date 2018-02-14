@@ -34,6 +34,7 @@
 #include <linux/stacktrace.h>
 #include <linux/prefetch.h>
 #include <linux/memcontrol.h>
+#include <linux/prints.h>
 
 #include <trace/events/kmem.h>
 
@@ -3514,7 +3515,8 @@ void kfree(const void *x)
 
 	page = virt_to_head_page(x);
 	if (unlikely(!PageSlab(page))) {
-		BUG_ON(!PageCompound(page));
+		if (!PageCompound(page))
+			PRINTK_ERR("Error: FIXME: PageCompound(page) is false\n");
 		kfree_hook(x);
 		__free_kmem_pages(page, compound_order(page));
 		return;

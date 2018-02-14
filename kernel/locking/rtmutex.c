@@ -16,6 +16,7 @@
 #include <linux/sched/rt.h>
 #include <linux/sched/deadline.h>
 #include <linux/timer.h>
+#include <linux/prints.h>
 
 #include "rtmutex_common.h"
 
@@ -1456,8 +1457,7 @@ EXPORT_SYMBOL_GPL(rt_mutex_timed_lock);
  */
 int __sched rt_mutex_trylock(struct rt_mutex *lock)
 {
-	if (WARN_ON(in_irq() || in_nmi() || in_serving_softirq()))
-		return 0;
+
 
 	return rt_mutex_fasttrylock(lock, rt_mutex_slowtrylock);
 }

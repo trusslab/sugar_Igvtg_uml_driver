@@ -38,6 +38,7 @@
 #include "intel_drv.h"
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
+#include <linux/prints.h>
 
 #define DP_LINK_CHECK_TIMEOUT	(10 * 1000)
 
@@ -1091,13 +1092,6 @@ intel_dp_aux_init(struct intel_dp *intel_dp, struct intel_connector *connector)
 		return;
 	}
 
-	ret = sysfs_create_link(&connector->base.kdev->kobj,
-				&intel_dp->aux.ddc.dev.kobj,
-				intel_dp->aux.ddc.dev.kobj.name);
-	if (ret < 0) {
-		DRM_ERROR("sysfs_create_link() for %s failed (%d)\n", name, ret);
-		drm_dp_aux_unregister(&intel_dp->aux);
-	}
 }
 
 static void

@@ -31,6 +31,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/mempolicy.h>
 #include <linux/swap.h>
+#include <linux/prints.h>
 
 struct i915_mm_struct {
 	struct mm_struct *mm;
@@ -480,6 +481,7 @@ st_set_pages(struct sg_table **st, struct page **pvec, int num_pages)
 {
 	struct scatterlist *sg;
 	int ret, n;
+	BUG(); 
 
 	*st = kmalloc(sizeof(**st), GFP_KERNEL);
 	if (*st == NULL)
